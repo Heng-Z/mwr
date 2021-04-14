@@ -7,6 +7,7 @@ from IsoNet.util.deconv_gpu import tom_deconv_tomo,Chunks
 import sys
 from fire import core
 import time
+from IsoNet.util.metadata import MetaData,Label,Item
 
 class ISONET:
     """
@@ -128,7 +129,7 @@ class ISONET:
         d_args = Arg(d)
         predict(d_args)
 
-    def make_mask(self,tomo_path,mask_path: str = None,side: int=8,percentile: int=99,threshold: int=1,mask_type: str="statistical"):
+    def make_mask(self,star_file,mask_path: str = './mask',side: int=8,percentile: int=90,threshold: int=0.85,mask_type: str="statistical",tomo_idx: str=None):
         """
         generate a mask to constrain sampling area of the tomogram
         :param tomo_path: path to the tomogram or tomogram folder
@@ -139,18 +140,53 @@ class ISONET:
         :param mask_type: 'statistical' or 'surface': Masks can be generated based on the statistics or just take the middle part of tomograms
         """
         from IsoNet.bin.make_mask import make_mask,make_mask_dir
-        if os.path.isdir(tomo_path):
-            make_mask_dir(tomo_path,mask_path,side=side,percentile=percentile,threshold=threshold,mask_type=mask_type)
-        
-        elif os.path.isfile(tomo_path):
-            if mask_path is None:
-                mask_path = tomo_path.split('.')[0]+'_mask.mrc'
-                print(mask_path)
+        if not os.path.isdir(mask_path):
+            os.mkdir(mask_path)
+        # write star percentile threshold
+        md = MetaData()
+        md.read(star_file)
+        if not 'rlnMaskPercentile' in md.getLabels():    
+            md.addLabels('rlnMaskPercentile','rlnMaskThreshold','rlnMaskName')
+            for it in md:
+                md._setItemValue(it,Label('rlnMaskPercentile'),percentile)
+                md._setItemValue(it,Label('rlnMaskThreshold'),threshold)
+                md._setItemValue(it,Label('rlnMaskName'),None)
+        if tomo_idx is not None:
+            if type(tomo_idx) is tuple:
+                tomo_idx = list(map(str,tomo_idx))
+            elif type(tomo_idx) is int:
+                tomo_idx = [str(tomo_idx)]
+            else:
+                tomo_idx = tomo_idx.split(',')
+        for it in md:
+            if tomo_idx is None or str(it.rlnIndex) in tomo_idx:
+                md._setItemValue(it,Label('rlnMaskPercentile'),percentile)
+                md._setItemValue(it,Label('rlnMaskThreshold'),threshold)
 
-            make_mask(tomo_path,mask_path,side=side,percentile=percentile,threshold=threshold,mask_type=mask_type)
-        else:
-            print('make_mask tomo_path error')
-        print('mask generated')
+                tomo_file = it.rlnMicrographName
+                tomo_root_name = os.path.splitext(os.path.basename(tomo_file))[0]
+                percentile_tomo = it.rlnMaskPercentile
+                threshold_tomo = it.rlnMaskThreshold
+                if os.path.isfile(tomo_file):
+                    mask_out_name = '{}/{}_mask.mrc'.format(mask_path,tomo_root_name)
+                    make_mask(tomo_file,mask_out_name,side=side,percentile=percentile_tomo,threshold=threshold_tomo,mask_type=mask_type)
+                
+                md._setItemValue(it,Label('rlnMaskName'),mask_out_name)
+        md.write(star_file)
+        # if os.path.isdir(tomo_path):
+        #     make_mask_dir(tomo_path,mask_path,side=side,percentile=percentile,threshold=threshold,mask_type=mask_type)
+        
+        # elif os.path.isfile(tomo_path):
+        #     if mask_path is None:
+        #         mask_path = tomo_path.split('.')[0]+'_mask.mrc'
+        #         print(mask_path)
+        #     make_mask(tomo_path,mask_path,side=side,percentile=percentile,threshold=threshold,mask_type=mask_type)
+        
+        # else:
+        #     print('make_mask tomo_path error')
+        # print('mask generated')
+        # if star_file is not None:
+
 
     def generate_noise(self,output_folder: str,number_volume: int, cubesize: int, minangle: int=-60,maxangle: int=60,
     anglestep: int=2, start: int=0,ncpus: int=20, mode: int=1):
@@ -249,7 +285,7 @@ class ISONET:
             s+="--iterations 15 --noise_level 0 --noise_start_iter 100"
         print(s)
 
-    def deconv(self,tomo, defocus: float=1.0, pixel_size: float=1.0,snrfalloff: float=1.0, deconvstrength: float=1.0):
+    def deconv(self,tomo, defocus: float=1.0, pixel_size: float=1.0,snrfalloff: float=1.0, deconvstrength: float=1.0, star_file: str=None):
         """
         \nCTF deconvolutin with weiner filter\n
         :param tomo: tomogram file
@@ -258,24 +294,50 @@ class ISONET:
         :param: snrfalloff: (1.0) The larger this values, more high frequency informetion are filtered out. 
         :param deconvstrength: (1.0) 
         """
-        import mrcfile
-        from multiprocessing import Pool
-        from functools import partial
-        with mrcfile.open(tomo) as mrc:
-            vol = mrc.data
-        c = Chunks(num=(1,4,4),overlap=0.25)
-        chunks_list = c.get_chunks(vol)
-        chunks_gpu_num_list = [[array,j%num_gpu] for j,array in enumerate(chunks_list)]
-        with Pool(num_gpu) as p:
-            partial_func = partial(tom_deconv_tomo,angpix=pixel_size, defocus=defocus, snrfalloff=snrfalloff, 
-                deconvstrength=deconvstrength, highpassnyquist=0.1, phaseflipped=False, phaseshift=0 )
-            results = p.map(partial_func,chunks_gpu_num_list,chunksize=1)
-        chunks_deconv_list = list(results)
-        vol_restored = c.restore(chunks_deconv_list)
-        outname = tomo.split('.')[0] +'-deconv.rec'
-        with mrcfile.new(outname, overwrite=True) as mrc:
-            mrc.set_data(vol_restored)
+        from IsoNet.util.metadata import MetaData 
+        if star_file is None:
+            import mrcfile
+            from multiprocessing import Pool
+            from functools import partial
+            with mrcfile.open(tomo) as mrc:
+                vol = mrc.data
+            c = Chunks(num=(1,4,4),overlap=0.25)
+            chunks_list = c.get_chunks(vol)
+            chunks_gpu_num_list = [[array,j%num_gpu] for j,array in enumerate(chunks_list)]
+            with Pool(num_gpu) as p:
+                partial_func = partial(tom_deconv_tomo,angpix=pixel_size, defocus=defocus, snrfalloff=snrfalloff, 
+                    deconvstrength=deconvstrength, highpassnyquist=0.1, phaseflipped=False, phaseshift=0 )
+                results = p.map(partial_func,chunks_gpu_num_list,chunksize=1)
+            chunks_deconv_list = list(results)
+            vol_restored = c.restore(chunks_deconv_list)
+            outname = tomo.split('.')[0] +'-deconv.rec'
+            with mrcfile.new(outname, overwrite=True) as mrc:
+                mrc.set_data(vol_restored)
         
+        else:
+
+            data_reader = MetaData()
+            data_reader.read(star_file)
+
+
+    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0):
+        md = MetaData()
+        md.addLabels('rlnIndex','rlnMicrographName','rlnPixelSize','rlnDefocus')
+        tomo_list = sorted(os.listdir(folder_name))
+        for i,tomo in enumerate(tomo_list):
+            it = Item()
+            md.addItem(it)
+            md._setItemValue(it,Label('rlnIndex'),str(i+1))
+            md._setItemValue(it,Label('rlnMicrographName'),os.path.join(folder_name,tomo))
+            md._setItemValue(it,Label('rlnPixelSize'),pixel_size)
+            md._setItemValue(it,Label('rlnDefocus'),0.0)
+
+            # f.write(str(i+1)+' ' + os.path.join(folder_name,tomo) + '\n')
+        md.write(output_star)
+            
+
+
+
     
         
 
