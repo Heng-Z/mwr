@@ -5,7 +5,7 @@ import mrcfile
 args = sys.argv
 from IsoNet.util.filter import maxmask,stdmask
 import numpy as np
-import cupy as cp
+#import cupy as cp
 import os
 
 def make_mask_dir(tomo_dir,mask_dir,side = 8,percentile=30,threshold=1,mask_type='statistical'):

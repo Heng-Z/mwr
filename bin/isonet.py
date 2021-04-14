@@ -3,7 +3,6 @@ import fire
 import logging
 import os
 from IsoNet.util.dict2attr import Arg,check_args
-from IsoNet.util.deconv_gpu import tom_deconv_tomo,Chunks
 import sys
 from fire import core
 import time
@@ -285,39 +284,73 @@ class ISONET:
             s+="--iterations 15 --noise_level 0 --noise_start_iter 100"
         print(s)
 
-    def deconv(self,tomo, defocus: float=1.0, pixel_size: float=1.0,snrfalloff: float=1.0, deconvstrength: float=1.0, star_file: str=None):
-        """
-        \nCTF deconvolutin with weiner filter\n
-        :param tomo: tomogram file
-        :param defocus: (1) defocus in um
-        :param pixel_size: (10) pixel size in anstroms
-        :param: snrfalloff: (1.0) The larger this values, more high frequency informetion are filtered out. 
-        :param deconvstrength: (1.0) 
-        """
-        from IsoNet.util.metadata import MetaData 
-        if star_file is None:
-            import mrcfile
-            from multiprocessing import Pool
-            from functools import partial
-            with mrcfile.open(tomo) as mrc:
-                vol = mrc.data
-            c = Chunks(num=(1,4,4),overlap=0.25)
-            chunks_list = c.get_chunks(vol)
-            chunks_gpu_num_list = [[array,j%num_gpu] for j,array in enumerate(chunks_list)]
-            with Pool(num_gpu) as p:
-                partial_func = partial(tom_deconv_tomo,angpix=pixel_size, defocus=defocus, snrfalloff=snrfalloff, 
-                    deconvstrength=deconvstrength, highpassnyquist=0.1, phaseflipped=False, phaseshift=0 )
-                results = p.map(partial_func,chunks_gpu_num_list,chunksize=1)
-            chunks_deconv_list = list(results)
-            vol_restored = c.restore(chunks_deconv_list)
-            outname = tomo.split('.')[0] +'-deconv.rec'
-            with mrcfile.new(outname, overwrite=True) as mrc:
-                mrc.set_data(vol_restored)
+    # def deconv(self,tomo, defocus: float=None, pixel_size: float=None,snrfalloff: float=1.0, deconvstrength: float=1.0, star_file: str=None):
+    #     """
+    #     \nCTF deconvolutin with weiner filter\n
+    #     :param tomo: tomogram file
+    #     :param defocus: (1) defocus in um
+    #     :param pixel_size: (10) pixel size in anstroms
+    #     :param: snrfalloff: (1.0) The larger this values, more high frequency informetion are filtered out. 
+    #     :param deconvstrength: (1.0) 
+    #     """
+    #     from IsoNet.util.deconv_gpu import tom_deconv_tomo,Chunks
+    #     from IsoNet.util.metadata import MetaData 
+    #     num_gpu=1
+    #     if star_file is None:
+    #         import mrcfile
+    #         from multiprocessing import Pool
+    #         from functools import partial
+    #         with mrcfile.open(tomo) as mrc:
+    #             vol = mrc.data
+    #         c = Chunks(num=(1,4,4),overlap=0.25)
+    #         chunks_list = c.get_chunks(vol)
+    #         chunks_gpu_num_list = [[array,j%num_gpu] for j,array in enumerate(chunks_list)]
+    #         with Pool(num_gpu) as p:
+    #             partial_func = partial(tom_deconv_tomo,angpix=pixel_size, defocus=defocus, snrfalloff=snrfalloff, 
+    #                 deconvstrength=deconvstrength, highpassnyquist=0.1, phaseflipped=False, phaseshift=0 )
+    #             results = p.map(partial_func,chunks_gpu_num_list,chunksize=1)
+    #         chunks_deconv_list = list(results)
+    #         vol_restored = c.restore(chunks_deconv_list)
+    #         outname = tomo.split('.')[0] +'-deconv.rec'
+    #         with mrcfile.new(outname, overwrite=True) as mrc:
+    #             mrc.set_data(vol_restored)
         
-        else:
+    #     else:
 
-            data_reader = MetaData()
-            data_reader.read(star_file)
+    #         data_reader = MetaData()
+    #         data_reader.read(star_file)
+
+    def deconv(self, star_file: str, deconv_folder:str="deconv", snrfalloff: float=1.0, deconvstrength: float=1.0, tomo_idx: str=None):
+        md = MetaData()
+        md.read(star_file)
+        if not 'rlnSnrFalloff' in md.getLabels():    
+            md.addLabels('rlnSnrFalloff','rlnDeconvStrength','rlnDeconvTomoName')
+            for it in md:
+                md._setItemValue(it,Label('rlnSnrFalloff'),snrfalloff)
+                md._setItemValue(it,Label('rlnDeconvStrength'),deconvstrength)
+                md._setItemValue(it,Label('rlnDeconvTomoName'),None)
+        if tomo_idx is not None:
+            if type(tomo_idx) is tuple:
+                tomo_idx = list(map(str,tomo_idx))
+            elif type(tomo_idx) is int:
+                tomo_idx = [str(tomo_idx)]
+            else:
+                tomo_idx = tomo_idx.split(',')
+
+        for it in md:
+            if tomo_idx is None or str(it.rlnIndex) in tomo_idx:
+                md._setItemValue(it,Label('rlnSnrFalloff'),snrfalloff)
+                md._setItemValue(it,Label('rlnDeconvStrength'),deconvstrength)
+                if it.rlnDeconvTomoName is None:
+                    tomo_file = it.rlnMicrographName
+                    basename = os.path.basename(tomo_file)
+                    
+                    if os.path.isdir(deconv_folder):
+                        os.mkdir(deconv_folder)
+                    deconv_tomo_name = '{}/{}'.format(deconv_folder,base_name)                
+                    md._setItemValue(it,Label('rlnDeconvTomoName'),deconv_tomo_name)
+                else:
+                    deconv_tomo_name = it.rlnDeconvTomoName
 
 
     def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0):

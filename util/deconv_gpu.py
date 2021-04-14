@@ -8,31 +8,31 @@ def tom_ctf1d(pixelsize, voltage, cs, defocus, amplitude, phaseshift, bfactor, l
 
 
     lambda1 = 12.2643247 / np.sqrt(voltage * (1.0 + voltage * 0.978466e-6)) * 1e-10
-    lambda2 = lambda1 * 2;
+    lambda2 = lambda1 * 2
 
 
     points = np.arange(0,length)
     points = points.astype(np.float)
-    points = points/(2 * length)*ny;
+    points = points/(2 * length)*ny
 
     k2 = points**2;
-    term1 = lambda1**3 * cs * k2**2;
+    term1 = lambda1**3 * cs * k2**2
 
-    w = np.pi / 2 * (term1 + lambda2 * defocus * k2) - phaseshift;
+    w = np.pi / 2 * (term1 + lambda2 * defocus * k2) - phaseshift
 
-    acurve = np.cos(w) * amplitude;
-    pcurve = -np.sqrt(1 - amplitude**2) * np.sin(w);
-    bfactor = np.exp(-bfactor * k2 * 0.25);
+    acurve = np.cos(w) * amplitude
+    pcurve = -np.sqrt(1 - amplitude**2) * np.sin(w)
+    bfactor = np.exp(-bfactor * k2 * 0.25)
 
 
-    return (pcurve + acurve)*bfactor;
+    return (pcurve + acurve)*bfactor
 
 def wiener1d(angpix, defocus, snrfalloff, deconvstrength, highpassnyquist, phaseflipped, phaseshift):
     data = np.arange(0,1+1/2047.,1/2047.)
-    highpass = np.minimum(np.ones(data.shape[0]), data/highpassnyquist) * np.pi;
-    highpass = 1-np.cos(highpass);
+    highpass = np.minimum(np.ones(data.shape[0]), data/highpassnyquist) * np.pi
+    highpass = 1-np.cos(highpass)
 
-    snr = np.exp(-data * snrfalloff * 100 / angpix) * (10^(3 * deconvstrength)) * highpass;
+    snr = np.exp(-data * snrfalloff * 100 / angpix) * (10^(3 * deconvstrength)) * highpass
     #snr[0] = -1
     ctf = tom_ctf1d(angpix*1e-10, 300e3, 2.7e-3, -defocus*1e-6, 0.07, phaseshift / 180 * np.pi, 0);
     if phaseflipped:
@@ -46,12 +46,12 @@ def tom_deconv_tomo(inp, angpix, defocus, snrfalloff, deconvstrength, highpassny
     vol = inp[0]
     gpuID = inp[1]
     data = np.arange(0,1+1/2047.,1/2047.)
-    highpass = np.minimum(np.ones(data.shape[0]), data/highpassnyquist) * np.pi;
+    highpass = np.minimum(np.ones(data.shape[0]), data/highpassnyquist) * np.pi
     highpass = 1-np.cos(highpass);
-    eps = 1e-10;
-    snr = np.exp(-data * snrfalloff * 100 / angpix) * np.power(10.0,(3.0 * deconvstrength)) * highpass + eps; 
+    eps = 1e-10
+    snr = np.exp(-data * snrfalloff * 100 / angpix) * np.power(10.0,(3.0 * deconvstrength)) * highpass + eps 
     #snr[0] = -1
-    ctf = tom_ctf1d(angpix*1e-10, 300e3, 2.7e-3, -defocus*1e-6, 0.07, phaseshift / 180 * np.pi, 0);
+    ctf = tom_ctf1d(angpix*1e-10, 300e3, 2.7e-3, -defocus*1e-6, 0.07, phaseshift / 180 * np.pi, 0)
     if phaseflipped:
         ctf = abs(ctf)
 
@@ -84,10 +84,10 @@ def tom_deconv_tomo(inp, angpix, defocus, snrfalloff, deconvstrength, highpassny
     y = y.astype(np.float32) / np.abs(s2);
     z = z.astype(np.float32) / np.maximum(1, np.abs(s3));
     #z = z.astype(float) / np.abs(s3);
-    r = np.sqrt(x**2+y**2+z**2);
+    r = np.sqrt(x**2+y**2+z**2)
     del x,y,z
-    r = np.minimum(1, r);
-    r = np.fft.ifftshift(r);
+    r = np.minimum(1, r)
+    r = np.fft.ifftshift(r)
 
     #x = 0:1/2047:1;
     print(data.shape, wiener.shape, r.shape)
