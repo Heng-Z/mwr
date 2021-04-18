@@ -47,48 +47,31 @@ def extract_subtomos(settings):
     mkfolder(settings.result_dir)
     mkfolder(settings.subtomo_dir)
 
-    #load the mask
-    if settings.mask_dir is not None:
-        mask_list = ["{}/{}".format(settings.mask_dir,f) for f in os.listdir(settings.mask_dir) if f.split(".")[-1]=="mrc" or f.split(".")[-1]=="rec" ]
-    else:
-        mask_list=[]
-    #use all the mrc files in the input folder
-    if settings.input_dir[-1] == '\\' or settings.input_dir[-1] == '/':
-        settings.input_dir= settings.input_dir[:-1]
-
-    settings.tomogram_list = ["{}/{}".format(settings.input_dir,f) for f in os.listdir(settings.input_dir) if f.split(".")[-1]=="mrc" or f.split(".")[-1]=="rec" ]
-    settings.tomogram_list_items = [f for f in os.listdir(settings.input_dir) if f.split(".")[-1]=="mrc" or f.split(".")[-1]=="rec"]
-    if len(settings.tomogram_list) <= 0:
+    from IsoNet.util.metadata import MetaData
+    md = MetaData()
+    md.read(settings.star_file)
+    if len(md)==0:
         sys.exit("No input exists. Please check it in input folder!")
-    for tomo_count, tomogram in enumerate(settings.tomogram_list):
-        root_name = settings.tomogram_list_items[tomo_count].split('.')[0]
-        with mrcfile.open(tomogram) as mrcData:
+
+    for it in md:
+        with mrcfile.open(it.rlnMicrographName) as mrcData:
             orig_data = mrcData.data.astype(np.float32)
-        #find corresponding mask from mask_list
-        if len(mask_list)>0:
-            close_mask = get_close_matches(root_name,os.listdir(settings.mask_dir),cutoff=0.6)# a list
-            if len(close_mask)>0:
-                with mrcfile.open(settings.mask_dir + '/' + close_mask[0]) as m:
-                    mask_data = m.data
-                if mask_data.shape == orig_data.shape:
-                    logging.info("{} mask loaded!".format(root_name))
-                else:
-                    mask_data = None
-                    logging.warning("{}:mask match error!".format(root_name))
-            else:
-                logging.info("{} no mask used!".format(root_name))
-                mask_data = None
+
+        if it.rlnMaskName is not None:
+            with mrcfile.open(it.rlnMaskName) as m:
+                mask_data = m.data
         else:
-            mask_data =None
+            mask_data = None
+            logging.info(" mask not been used for tomogram {}!".format(it.rlnIndex))
 
         seeds=create_cube_seeds(orig_data,settings.ncube,settings.crop_size,mask=mask_data)
         subtomos=crop_cubes(orig_data,seeds,settings.crop_size)
 
         # save sampled subtomo to {results_dir}/subtomos instead of subtomo_dir (as previously does)
+        base_name = os.path.splitext(os.path.basename(it.rlnMicrographName))[0]
         for j,s in enumerate(subtomos):
-            with mrcfile.new('{}/{}_{:0>6d}.mrc'.format(settings.subtomo_dir,root_name,j), overwrite=True) as output_mrc:
+            with mrcfile.new('{}/{}_{:0>6d}.mrc'.format(settings.subtomo_dir, base_name, j), overwrite=True) as output_mrc:
                 output_mrc.set_data(s.astype(np.float32))
-    # indent changed here
     return settings
 
 #preparation files for the first iteration

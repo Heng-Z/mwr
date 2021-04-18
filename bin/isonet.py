@@ -18,9 +18,8 @@ class ISONET:
     isonet.py predict
     """
     def refine(self,
-        input_dir: str = None,
+        star_file: str = None,
         gpuID: str = '0,1,2,3',
-        mask_dir: str= None,
         iterations: int = 50,
         data_dir: str = "data",
         pretrained_model = None,
@@ -128,7 +127,12 @@ class ISONET:
         d_args = Arg(d)
         predict(d_args)
 
-    def make_mask(self,star_file,mask_path: str = './mask',side: int=8,percentile: int=90,threshold: int=0.85,mask_type: str="statistical",tomo_idx: str=None):
+    def make_mask(self,star_file,
+        mask_path: str = 'mask',
+        side: int=8,
+        percentile: int=None,
+        threshold: int=None,
+        mask_type: str="statistical",tomo_idx: str=None):
         """
         generate a mask to constrain sampling area of the tomogram
         :param tomo_path: path to the tomogram or tomogram folder
@@ -147,9 +151,10 @@ class ISONET:
         if not 'rlnMaskPercentile' in md.getLabels():    
             md.addLabels('rlnMaskPercentile','rlnMaskThreshold','rlnMaskName')
             for it in md:
-                md._setItemValue(it,Label('rlnMaskPercentile'),percentile)
-                md._setItemValue(it,Label('rlnMaskThreshold'),threshold)
+                md._setItemValue(it,Label('rlnMaskPercentile'),90)
+                md._setItemValue(it,Label('rlnMaskThreshold'),0.85)
                 md._setItemValue(it,Label('rlnMaskName'),None)
+
         if tomo_idx is not None:
             if type(tomo_idx) is tuple:
                 tomo_idx = list(map(str,tomo_idx))
@@ -159,16 +164,22 @@ class ISONET:
                 tomo_idx = tomo_idx.split(',')
         for it in md:
             if tomo_idx is None or str(it.rlnIndex) in tomo_idx:
-                md._setItemValue(it,Label('rlnMaskPercentile'),percentile)
-                md._setItemValue(it,Label('rlnMaskThreshold'),threshold)
+                if percentile is not None:
+                    md._setItemValue(it,Label('rlnMaskPercentile'),percentile)
+                if threshold is not None:
+                    md._setItemValue(it,Label('rlnMaskThreshold'),threshold)
 
                 tomo_file = it.rlnMicrographName
                 tomo_root_name = os.path.splitext(os.path.basename(tomo_file))[0]
-                percentile_tomo = it.rlnMaskPercentile
-                threshold_tomo = it.rlnMaskThreshold
+
                 if os.path.isfile(tomo_file):
                     mask_out_name = '{}/{}_mask.mrc'.format(mask_path,tomo_root_name)
-                    make_mask(tomo_file,mask_out_name,side=side,percentile=percentile_tomo,threshold=threshold_tomo,mask_type=mask_type)
+                    make_mask(tomo_file,
+                            mask_out_name,
+                            side=side,
+                            percentile=it.rlnMaskPercentile,
+                            threshold=it.rlnMaskThreshold,
+                            mask_type=mask_type)
                 
                 md._setItemValue(it,Label('rlnMaskName'),mask_out_name)
         md.write(star_file)
@@ -187,22 +198,22 @@ class ISONET:
         # if star_file is not None:
 
 
-    def generate_noise(self,output_folder: str,number_volume: int, cubesize: int, minangle: int=-60,maxangle: int=60,
-    anglestep: int=2, start: int=0,ncpus: int=20, mode: int=1):
-        """
-        Generate training noise to accelerate the missing wedge information retrieval. This commond will generate a folder containing noise volumes which mimics the distorded noise pattern in the tomograms with size of cubesize x cubesize x cubesize. The noise volumes are indexed from start to start + number_volume
-        :param output_folder: path to folder for saving noises
-        :param number_volume: number of noise cubes to generate
-        :param cubesize: side length of the noise cubes, usually 64 or 96
-        :param ncpus: (20) number of cpus to use
-        :param minangle: (-60) the minimal angle of your tilt series
-        :param maxangle: (60) the maximal angle of your tilt series
-        :param anglestep: (2) the step of your tilt series' angles
-        :param start: (0) When you want to add additional noise volumes, you can specify the start value as the number of already generated noise volumes. So the alreaded generated volumes will not be ovewrited.
-        :param mode: (1) mode=1, noise is reconstructed by back-projection algorithm; mode=2 or else, noise is gained by filtering gaussian noise volumes.
-        """
-        from IsoNet.util.noise_generator import make_noise
-        make_noise(output_folder=output_folder, number_volume=number_volume, cubesize=cubesize, minangle=minangle,maxangle=maxangle, anglestep=anglestep, start=start,ncpus=ncpus, mode=mode)
+    # def generate_noise(self,output_folder: str,number_volume: int, cubesize: int, minangle: int=-60,maxangle: int=60,
+    # anglestep: int=2, start: int=0,ncpus: int=20, mode: int=1):
+    #     """
+    #     Generate training noise to accelerate the missing wedge information retrieval. This commond will generate a folder containing noise volumes which mimics the distorded noise pattern in the tomograms with size of cubesize x cubesize x cubesize. The noise volumes are indexed from start to start + number_volume
+    #     :param output_folder: path to folder for saving noises
+    #     :param number_volume: number of noise cubes to generate
+    #     :param cubesize: side length of the noise cubes, usually 64 or 96
+    #     :param ncpus: (20) number of cpus to use
+    #     :param minangle: (-60) the minimal angle of your tilt series
+    #     :param maxangle: (60) the maximal angle of your tilt series
+    #     :param anglestep: (2) the step of your tilt series' angles
+    #     :param start: (0) When you want to add additional noise volumes, you can specify the start value as the number of already generated noise volumes. So the alreaded generated volumes will not be ovewrited.
+    #     :param mode: (1) mode=1, noise is reconstructed by back-projection algorithm; mode=2 or else, noise is gained by filtering gaussian noise volumes.
+    #     """
+    #     from IsoNet.util.noise_generator import make_noise
+    #     make_noise(output_folder=output_folder, number_volume=number_volume, cubesize=cubesize, minangle=minangle,maxangle=maxangle, anglestep=anglestep, start=start,ncpus=ncpus, mode=mode)
 
     def check(self):
         from IsoNet.bin.predict import predict
@@ -320,15 +331,23 @@ class ISONET:
     #         data_reader = MetaData()
     #         data_reader.read(star_file)
 
-    def deconv(self, star_file: str, deconv_folder:str="deconv", snrfalloff: float=1.0, deconvstrength: float=1.0, tomo_idx: str=None):
+    def deconv(self, star_file: str, 
+        deconv_folder:str="deconv", 
+        snrfalloff: float=None, 
+        deconvstrength: float=None, 
+        tomo_idx: str=None):
         md = MetaData()
         md.read(star_file)
-        if not 'rlnSnrFalloff' in md.getLabels():    
+        if not 'rlnSnrFalloff' in md.getLabels():
             md.addLabels('rlnSnrFalloff','rlnDeconvStrength','rlnDeconvTomoName')
             for it in md:
-                md._setItemValue(it,Label('rlnSnrFalloff'),snrfalloff)
-                md._setItemValue(it,Label('rlnDeconvStrength'),deconvstrength)
+                md._setItemValue(it,Label('rlnSnrFalloff'),1.0)
+                md._setItemValue(it,Label('rlnDeconvStrength'),1.0)
                 md._setItemValue(it,Label('rlnDeconvTomoName'),None)
+
+        if os.path.isdir(deconv_folder):
+            os.mkdir(deconv_folder)
+
         if tomo_idx is not None:
             if type(tomo_idx) is tuple:
                 tomo_idx = list(map(str,tomo_idx))
@@ -339,21 +358,34 @@ class ISONET:
 
         for it in md:
             if tomo_idx is None or str(it.rlnIndex) in tomo_idx:
-                md._setItemValue(it,Label('rlnSnrFalloff'),snrfalloff)
-                md._setItemValue(it,Label('rlnDeconvStrength'),deconvstrength)
-                if it.rlnDeconvTomoName is None:
+                if snrfalloff is not None:
+                    md._setItemValue(it,Label('rlnSnrFalloff'), snrfalloff)
+                if deconvstrength is not None:
+                    md._setItemValue(it,Label('rlnDeconvStrength'),deconvstrength)
+                if (it.rlnDeconvTomoName is None) or (it.rlnDeconvTomoName == "None"):
                     tomo_file = it.rlnMicrographName
-                    basename = os.path.basename(tomo_file)
-                    
-                    if os.path.isdir(deconv_folder):
-                        os.mkdir(deconv_folder)
-                    deconv_tomo_name = '{}/{}'.format(deconv_folder,base_name)                
-                    md._setItemValue(it,Label('rlnDeconvTomoName'),deconv_tomo_name)
+                    base_name = os.path.basename(tomo_file)                                        
+                    deconv_tomo_name = '{}/{}'.format(deconv_folder,base_name)
                 else:
                     deconv_tomo_name = it.rlnDeconvTomoName
 
+                # Do something
+                md._setItemValue(it,Label('rlnDeconvTomoName'),deconv_tomo_name)
+        md.write(star_file)
 
-    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0):
+    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0, defocus = 0.0):
+        """
+        \nGenerate recommanded parameters for "isonet.py refine" for users\n
+        if is phase plate, keep defocus 0.0 if defocus different change manually in the output tomogram.star
+        Only print command, not run it.
+        :param input_dir: (None) directory containing tomogram(s) from which subtomos are extracted; format: .mrc or .rec
+        :param mask_dir: (None) folder containing mask files, Eash mask file corresponds to one tomogram file, usually basename-mask.mrc
+        :param ncpu: (10) number of avaliable cpu cores
+        :param ngpu: (4) number of avaliable gpu cards
+        :param gpu_memory: (10) memory of each gpu
+        :param pixel_size: (10) pixel size in anstroms
+        :param: also_denoise: (True) Preform denoising after 15 iterations when set true
+        """       
         md = MetaData()
         md.addLabels('rlnIndex','rlnMicrographName','rlnPixelSize','rlnDefocus')
         tomo_list = sorted(os.listdir(folder_name))
@@ -363,16 +395,11 @@ class ISONET:
             md._setItemValue(it,Label('rlnIndex'),str(i+1))
             md._setItemValue(it,Label('rlnMicrographName'),os.path.join(folder_name,tomo))
             md._setItemValue(it,Label('rlnPixelSize'),pixel_size)
-            md._setItemValue(it,Label('rlnDefocus'),0.0)
+            md._setItemValue(it,Label('rlnDefocus'),defocus)
 
             # f.write(str(i+1)+' ' + os.path.join(folder_name,tomo) + '\n')
         md.write(output_star)
             
-
-
-
-    
-        
 
     def extract(self,
         input_dir: str = None,
