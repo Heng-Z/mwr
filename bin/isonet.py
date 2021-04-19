@@ -373,7 +373,7 @@ class ISONET:
                 md._setItemValue(it,Label('rlnDeconvTomoName'),deconv_tomo_name)
         md.write(star_file)
 
-    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0, defocus = 0.0):
+    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0, defocus = 0.0, number_subtomos = 200):
         """
         \nGenerate recommanded parameters for "isonet.py refine" for users\n
         if is phase plate, keep defocus 0.0 if defocus different change manually in the output tomogram.star
@@ -387,7 +387,7 @@ class ISONET:
         :param: also_denoise: (True) Preform denoising after 15 iterations when set true
         """       
         md = MetaData()
-        md.addLabels('rlnIndex','rlnMicrographName','rlnPixelSize','rlnDefocus')
+        md.addLabels('rlnIndex','rlnMicrographName','rlnPixelSize','rlnDefocus','rlnNumberSubtomo')
         tomo_list = sorted(os.listdir(folder_name))
         for i,tomo in enumerate(tomo_list):
             it = Item()
@@ -396,17 +396,19 @@ class ISONET:
             md._setItemValue(it,Label('rlnMicrographName'),os.path.join(folder_name,tomo))
             md._setItemValue(it,Label('rlnPixelSize'),pixel_size)
             md._setItemValue(it,Label('rlnDefocus'),defocus)
-
+            md._setItemValue(it,Label('rlnNumberSubtomo'),number_subtomos)
             # f.write(str(i+1)+' ' + os.path.join(folder_name,tomo) + '\n')
         md.write(output_star)
             
 
     def extract(self,
-        input_dir: str = None,
-        mask_dir: str= None,
-        crop_size: int = 96,
-        ncube: int = 1,
+        star_file: str = None,
+        subtomo_dir: str = "subtomo",
+        subtomo_star: str = "subtomo.star",
+        cube_size: int = 64,
+        log_level: str="info"
         ):
+
         """
         \nExtract subtomograms\n
         :param input_dir: (None) directory containing tomogram(s) from which subtomos are extracted; format: .mrc or .rec
@@ -414,11 +416,27 @@ class ISONET:
         :param crop_size: (96) Size of cubes to impose missing wedge. Should be same or larger than size of cubes. Recommend 1.5 times of cube size
         :param ncube: (1) Number of cubes generated for each tomogram. Because each sampled subtomogram rotates 16 times, the actual number of subtomograms for trainings is ncube*16.
         """
-        from IsoNet.preprocessing.prepare import extract_subtomos
+
         d = locals()
         d_args = Arg(d)
-        d_args.only_extract_subtomos = True
+        if d_args.log_level == "debug":
+            logging.basicConfig(format='%(asctime)s, %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt="%H:%M:%S",level=logging.DEBUG)
+        else:
+            logging.basicConfig(format='%(asctime)s, %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt="%m-%d %H:%M:%S",level=logging.INFO)
+        logger = logging.getLogger('IsoNet.extract')
+
+        if  os.path.isdir(subtomo_dir):
+            logger.warning("subtomo directory exists, the current directory will be overwriten")
+            import shutil
+            shutil.rmtree(subtomo_dir)
+        os.mkdir(subtomo_dir)
+
+        from IsoNet.preprocessing.prepare import extract_subtomos
+        d_args.crop_size = int(int(cube_size) * 1.5)
+        d_args.subtomo_dir = subtomo_dir
         extract_subtomos(d_args)
+
+        
 
     def gui(self):
         import IsoNet.gui.Isonet_app as app

@@ -26,6 +26,10 @@ import copy
 
 
 LABELS = {
+    'rlnImageName': str,
+    'rlnCubeSize':int,
+    'rlnCropSize':int,
+    'rlnNumberSubtomo': int,
     'rlnMaskName': str,
     'rlnVoltage': float,
     'rlnDefocusU': float,
@@ -36,7 +40,6 @@ LABELS = {
     'rlnCtfFigureOfMerit': float,
     'rlnMagnification': float,
     'rlnAmplitudeContrast': float,
-    'rlnImageName': str,
     'rlnOriginalName': str,
     'rlnCtfImage': str,
     'rlnCoordinateX': float,
@@ -60,6 +63,7 @@ LABELS = {
     'rlnNrOfFrames': int,
     'rlnMaxValueProbDistribution': float,
     'rlnIndex': str,
+    'rlnSubtomoIndex': str,
     'rlnMaskPercentile': float,
     'rlnMaskThreshold': float
 }

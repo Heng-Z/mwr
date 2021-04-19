@@ -44,39 +44,51 @@ def extract_subtomos(settings):
     extract subtomo from whole tomogram based on mask
     and feed to generate_first_iter_mrc to generate xx_iter00.xx
     '''
-    mkfolder(settings.result_dir)
-    mkfolder(settings.subtomo_dir)
+    #mkfolder(settings.result_dir)
+    #mkfolder(settings.subtomo_dir)
 
-    from IsoNet.util.metadata import MetaData
+    from IsoNet.util.metadata import MetaData, Item, Label
     md = MetaData()
     md.read(settings.star_file)
     if len(md)==0:
         sys.exit("No input exists. Please check it in input folder!")
 
+    subtomo_md = MetaData()
+    subtomo_md.addLabels('rlnSubtomoIndex','rlnImageName','rlnCubeSize','rlnCropSize')
+    count=0
     for it in md:
         with mrcfile.open(it.rlnMicrographName) as mrcData:
             orig_data = mrcData.data.astype(np.float32)
-
-        if it.rlnMaskName is not None:
+        if "rlnMaskName" in md.getLabels() and it.rlnMaskName is not None:
             with mrcfile.open(it.rlnMaskName) as m:
                 mask_data = m.data
         else:
             mask_data = None
             logging.info(" mask not been used for tomogram {}!".format(it.rlnIndex))
 
-        seeds=create_cube_seeds(orig_data,settings.ncube,settings.crop_size,mask=mask_data)
+        seeds=create_cube_seeds(orig_data, it.rlnNumberSubtomo, settings.crop_size,mask=mask_data)
         subtomos=crop_cubes(orig_data,seeds,settings.crop_size)
 
         # save sampled subtomo to {results_dir}/subtomos instead of subtomo_dir (as previously does)
         base_name = os.path.splitext(os.path.basename(it.rlnMicrographName))[0]
+        
         for j,s in enumerate(subtomos):
-            with mrcfile.new('{}/{}_{:0>6d}.mrc'.format(settings.subtomo_dir, base_name, j), overwrite=True) as output_mrc:
+            im_name = '{}/{}_{:0>6d}.mrc'.format(settings.subtomo_dir, base_name, j)
+            with mrcfile.new(im_name, overwrite=True) as output_mrc:
+                count+=1
+                subtomo_it = Item()
+                subtomo_md.addItem(subtomo_it)
+                subtomo_md._setItemValue(subtomo_it,Label('rlnSubtomoIndex'), str(count))
+                subtomo_md._setItemValue(subtomo_it,Label('rlnImageName'), im_name)
+                subtomo_md._setItemValue(subtomo_it,Label('rlnCubeSize'),settings.cube_size)
+                subtomo_md._setItemValue(subtomo_it,Label('rlnCropSize'),settings.crop_size)
                 output_mrc.set_data(s.astype(np.float32))
-    return settings
+    subtomo_md.write(settings.subtomo_star)
+
 
 #preparation files for the first iteration
 def prepare_first_iter(settings):
-    settings = extract_subtomos(settings)
+    extract_subtomos(settings)
     settings.mrc_list = os.listdir(settings.subtomo_dir)
     settings.mrc_list = ['{}/{}'.format(settings.subtomo_dir,i) for i in settings.mrc_list]
     #need further test
