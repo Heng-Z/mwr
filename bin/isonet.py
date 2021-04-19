@@ -100,7 +100,7 @@ class ISONET:
         if d_args.log_level == "debug":
             logging.basicConfig(format='%(asctime)s, %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt="%H:%M:%S",level=logging.DEBUG)
         else:
-            logging.basicConfig(format='%(asctime)s, %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt="%m-%d %H:%M:%S",level=logging.INFO)
+            logging.basicConfig(format='%(asctime)s, %(levelname)-8s %(message)s',datefmt="%m-%d %H:%M:%S",level=logging.INFO)
 
         logger = logging.getLogger('IsoNet.bin.refine')
         # d_args.only_extract_subtomos = False
@@ -132,7 +132,10 @@ class ISONET:
         side: int=8,
         percentile: int=None,
         threshold: int=None,
-        mask_type: str="statistical",tomo_idx: str=None):
+        use_deconv_tomo: bool=True,
+        mask_type: str="statistical",
+
+        tomo_idx: str=None):
         """
         generate a mask to constrain sampling area of the tomogram
         :param tomo_path: path to the tomogram or tomogram folder
@@ -168,8 +171,10 @@ class ISONET:
                     md._setItemValue(it,Label('rlnMaskPercentile'),percentile)
                 if threshold is not None:
                     md._setItemValue(it,Label('rlnMaskThreshold'),threshold)
-
-                tomo_file = it.rlnMicrographName
+                if use_deconv_tomo and "rlnDeconvTomoName" in md.getLabels():
+                    tomo_file = it.rlnDeconvTomoName
+                else:
+                    tomo_file = it.rlnMicrographName
                 tomo_root_name = os.path.splitext(os.path.basename(tomo_file))[0]
 
                 if os.path.isfile(tomo_file):
@@ -269,6 +274,7 @@ class ISONET:
         deconv_folder:str="deconv", 
         snrfalloff: float=None, 
         deconvstrength: float=None, 
+        highpassnyquist: float=0.1,
         tile: tuple=(1,4,4),
         ncpu:int=4,
         tomo_idx: str=None):
@@ -305,11 +311,11 @@ class ISONET:
                     deconv_tomo_name = '{}/{}'.format(deconv_folder,base_name)
                 else:
                     deconv_tomo_name = it.rlnDeconvTomoName
-                deconv_one(it.rlnMicrographName,deconv_tomo_name,defocus=it.rlnDefocus, pixel_size=it.rlnPixelSize,snrfalloff=it.rlnSnrFalloff, deconvstrength=it.rlnDeconvStrength,tile=tile,ncpu=ncpu)
+                deconv_one(it.rlnMicrographName,deconv_tomo_name,defocus=it.rlnDefocus/10000.0, pixel_size=it.rlnPixelSize,snrfalloff=it.rlnSnrFalloff, deconvstrength=it.rlnDeconvStrength,highpassnyquist=highpassnyquist,tile=tile,ncpu=ncpu)
                 md._setItemValue(it,Label('rlnDeconvTomoName'),deconv_tomo_name)
         md.write(star_file)
 
-    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0, defocus = 1.0, number_subtomos = 200):
+    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0, defocus = 0.0, number_subtomos = 100):
         """
         \nGenerate recommanded parameters for "isonet.py refine" for users\n
         if is phase plate, keep defocus 0.0 if defocus different change manually in the output tomogram.star

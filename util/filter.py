@@ -12,7 +12,7 @@ def maxmask(tomo, side=5,percentile=60):
     # patch_size = [(p//2 if p>1 else p) for p in patch_size]
     print('maximum_filter')
     filtered = maximum_filter(-image1, 2*side+1, mode='reflect')
-    out =  filtered > np.percentile(-image1,100-percentile)
+    out =  filtered > np.percentile(filtered,100-percentile)
     out = out.astype(np.uint8)
     return out
 
@@ -31,7 +31,8 @@ def stdmask(tomo,side=10,threshold=1):
     out = out>np.std(tomo)*threshold
     return out.astype(np.uint8)
 
-  
+# def gauss
+
 if __name__ == "__main__":
     import sys
     import mrcfile

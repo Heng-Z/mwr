@@ -8,13 +8,17 @@ import numpy as np
 import glob
 import os
 import shutil
-
+from IsoNet.util.metadata import MetaData, Item, Label
 def run(args):
+    md = MetaData()
+    md.read(args.subtomo_star)
     #*******set fixed parameters*******
     args.reload_weight = True
     args.noise_mode = 1
     args.result_dir = 'results'
     args.continue_from = "training"
+    args.crop_size = md._data[0].rlnCropSize
+    args.cube_size = md._data[0].rlnCubeSize
     args.predict_cropsize = args.crop_size
     args.predict_batch_size = args.batch_size
     args.noise_dir = None
@@ -40,6 +44,14 @@ def run(args):
     #import tensorflow related modules after setting environment
     from IsoNet.training.predict import predict
     from IsoNet.training.train import prepare_first_model, train_data
+    
+    if len(md) <=0:
+        logging.error("Subtomo list is empty!")
+        sys.exit(0)
+    args.mrc_list = []
+    for i,it in enumerate(md):
+        if "rlnImageName" in md.getLabels():
+            args.mrc_list.append(it.rlnImageName)
 
     if args.continue_iter == 0 or args.pretrained_model is None:
         args = prepare_first_iter(args)
@@ -51,9 +63,6 @@ def run(args):
             args = prepare_first_model(args)
     else: #mush has pretrained model and continue_iter >0
         args.init_model = args.pretrained_model
-
-    args.mrc_list = os.listdir(args.subtomo_dir)
-    args.mrc_list = ['{}/{}'.format(args.subtomo_dir,i) for i in args.mrc_list]
 
     continue_from_training = not os.path.isfile('{}/model_iter{:0>2d}.h5'.format
     (args.result_dir,args.continue_iter))

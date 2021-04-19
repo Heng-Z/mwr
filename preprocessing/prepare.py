@@ -97,18 +97,7 @@ def extract_subtomos(settings):
 #preparation files for the first iteration
 def prepare_first_iter(settings):
     # extract_subtomos(settings)
-    md = MetaData()
-    md.read(settings.subtomo_star)
-    if len(md) <=0:
-        logging.error("Subtomo list is empty!")
-        sys.exit(0)
-    settings.mrc_list = []
-    for i,it in enumerate(md):
-        if "rlnImageName" in md.getLabels():
-            settings.mrc_list.append(it.rlnImageName)
-        if i == 0:
-            settings.crop_size = it.rlnCropSize
-            settings.cube_size = it.rlnCubeSize
+    mkfolder(settings.result_dir)  
     # settings.mrc_list = os.listdir(settings.subtomo_dir)
     # settings.mrc_list = ['{}/{}'.format(settings.subtomo_dir,i) for i in settings.mrc_list]
 
@@ -125,7 +114,6 @@ def prepare_first_iter(settings):
     else:
         for i in settings.mrc_list:
             generate_first_iter_mrc(i,settings)
-
     return settings
     
 def get_cubes_one(data, settings, start = 0, mask = None, add_noise = 0):

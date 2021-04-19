@@ -112,7 +112,8 @@ class Chunks:
         #side*(1-overlap)*(num-1)+side = sp + side*overlap -> side *(1-overlap) * num = side
         root_name = os.path.splitext(os.path.basename(tomo_name))[0]
         with mrcfile.open(tomo_name) as f:
-            vol = f.data
+            vol = f.data.astype(np.float32)
+        print('in type:',type(vol[0,0,0]) )
         cube_size = np.round(np.array(vol.shape)/((1-self.overlap)*np.array(self.num))).astype(np.int16)
         overlap_len = np.round(cube_size*self.overlap).astype(np.int16)
         overlap_len = overlap_len + overlap_len %2
@@ -167,7 +168,7 @@ class Chunks:
                     overlap_len[1]//2:-(overlap_len[1]//2),
                     overlap_len[2]//2:-(overlap_len[2]//2)]
 
-def deconv_one(tomo, out_tomo,defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconvstrength=1.0,tile=(1,4,4),ncpu=4):
+def deconv_one(tomo, out_tomo,defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconvstrength=1.0,highpassnyquist=0.1,tile=(1,4,4),ncpu=4):
     """
     \nGenerate recommanded parameters for "isonet.py refine" for users\n
     if is phase plate, keep defocus 0.0 if defocus different change manually in the output tomogram.star
@@ -194,7 +195,7 @@ def deconv_one(tomo, out_tomo,defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconv
     
 
     root_name = os.path.splitext(os.path.basename(tomo))[0]
-    print(tomo,'angpix:',pixel_size, 'defocus',defocus, 'snrfalloff',snrfalloff)
+    print(tomo,'angpix:',pixel_size, 'defocus',defocus, 'snrfalloff',snrfalloff,'highpassnyquist',highpassnyquist)
     c = Chunks(num=tile,overlap=0.25)
     chunks_list = c.get_chunks(tomo) # list of name of subtomograms
     # chunks_gpu_num_list = [[array,j%num_gpu] for j,array in enumerate(chunks_list)]
@@ -202,7 +203,7 @@ def deconv_one(tomo, out_tomo,defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconv
     chunks_deconv_list = []
     with Pool(ncpu) as p:
         partial_func = partial(tom_deconv_tomo,angpix=pixel_size, defocus=defocus, snrfalloff=snrfalloff, 
-                deconvstrength=deconvstrength, highpassnyquist=0.1, phaseflipped=False, phaseshift=0 )
+                deconvstrength=deconvstrength, highpassnyquist=highpassnyquist, phaseflipped=False, phaseshift=0 )
         # results = p.map(partial_func,chunks_gpu_num_list,chunksize=1)
         chunks_deconv_list = list(p.map(partial_func,chunks_list))
     # pool_process(partial_func,chunks_list_single_pool,ncpu)
