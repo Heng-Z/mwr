@@ -167,7 +167,7 @@ class Chunks:
                     overlap_len[1]//2:-(overlap_len[1]//2),
                     overlap_len[2]//2:-(overlap_len[2]//2)]
 
-def deconv_one(tomo, defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconvstrength=1.0,tile=(1,4,4),ncpu=4):
+def deconv_one(tomo, out_tomo,defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconvstrength=1.0,tile=(1,4,4),ncpu=4):
     """
     \nGenerate recommanded parameters for "isonet.py refine" for users\n
     if is phase plate, keep defocus 0.0 if defocus different change manually in the output tomogram.star
@@ -185,32 +185,39 @@ def deconv_one(tomo, defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconvstrength=
     from multiprocessing import Pool
     from functools import partial
     from IsoNet.util.deconvolution import tom_deconv_tomo,Chunks
+    import shutil
+    import time 
+    t1 = time.time()
     if os.path.isdir('./deconv_temp'):
         shutil.rmtree('./deconv_temp')
     os.mkdir('./deconv_temp')
     
 
     root_name = os.path.splitext(os.path.basename(tomo))[0]
-    outname = root_name +'-deconv.rec'
-    print('outName: ',outname)
-    print('angpix:',pixel_size, 'defocus',defocus, 'snrfalloff',snrfalloff)
+    print(tomo,'angpix:',pixel_size, 'defocus',defocus, 'snrfalloff',snrfalloff)
     c = Chunks(num=tile,overlap=0.25)
     chunks_list = c.get_chunks(tomo) # list of name of subtomograms
     # chunks_gpu_num_list = [[array,j%num_gpu] for j,array in enumerate(chunks_list)]
-    print(chunks_list)
+    # print(chunks_list)
     chunks_deconv_list = []
-    partial_func = partial(tom_deconv_tomo,angpix=pixel_size, defocus=defocus, snrfalloff=snrfalloff, 
-                deconvstrength=deconvstrength, highpassnyquist=0.1, phaseflipped=False, phaseshift=0 )
     with Pool(ncpu) as p:
+        partial_func = partial(tom_deconv_tomo,angpix=pixel_size, defocus=defocus, snrfalloff=snrfalloff, 
+                deconvstrength=deconvstrength, highpassnyquist=0.1, phaseflipped=False, phaseshift=0 )
         # results = p.map(partial_func,chunks_gpu_num_list,chunksize=1)
         chunks_deconv_list = list(p.map(partial_func,chunks_list))
     # pool_process(partial_func,chunks_list_single_pool,ncpu)
         # chunks_deconv_list += results
     vol_restored = c.restore(chunks_deconv_list)
-    with mrcfile.new(outname, overwrite=True) as mrc:
+    with mrcfile.new(out_tomo, overwrite=True) as mrc:
         mrc.set_data(vol_restored)
     shutil.rmtree('./deconv_temp')
+    t2 = time.time()
+    print('time consumed: ',t2-t1)
     
+
+
+
+
 #TODO: make deconv_one compatible with deconv_gpu
 def deconv_gpu(tomo, defocus: float=1.0, pixel_size: float=1.0,snrfalloff: float=1.0, deconvstrength: float=1.0,tile: tuple=(1,4,4),num_gpu:int=0,ncpu:int=4):
     """
