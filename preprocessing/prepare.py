@@ -1,4 +1,5 @@
 import os 
+import sys
 import logging
 import sys
 import mrcfile
@@ -9,7 +10,8 @@ from multiprocessing import Pool
 import numpy as np
 from functools import partial
 from IsoNet.util.rotations import rotation_list
-from difflib import get_close_matches
+# from difflib import get_close_matches
+from IsoNet.util.metadata import MetaData, Item, Label
 #Make a new folder. If exist, nenew it
 # Do not set basic config for logging here
 # logging.basicConfig(format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt="%H:%M:%S",level=logging.DEBUG)
@@ -46,8 +48,6 @@ def extract_subtomos(settings):
     '''
     #mkfolder(settings.result_dir)
     #mkfolder(settings.subtomo_dir)
-
-    from IsoNet.util.metadata import MetaData, Item, Label
     md = MetaData()
     md.read(settings.star_file)
     if len(md)==0:
@@ -57,8 +57,16 @@ def extract_subtomos(settings):
     subtomo_md.addLabels('rlnSubtomoIndex','rlnImageName','rlnCubeSize','rlnCropSize')
     count=0
     for it in md:
-        with mrcfile.open(it.rlnMicrographName) as mrcData:
-            orig_data = mrcData.data.astype(np.float32)
+        if settings.use_deconv_tomo and "rlnDeconvTomoName" in md.getLabels():
+            print("Extract from deconvolved tomogram {}".format(it.rlnDeconvTomoName))
+            with mrcfile.open(it.rlnDeconvTomoName) as mrcData:
+                orig_data = mrcData.data.astype(np.float32)
+        else:        
+            print("Extract from origional tomogram {}".format(it.rlnMicrographName))
+            with mrcfile.open(it.rlnMicrographName) as mrcData:
+                orig_data = mrcData.data.astype(np.float32)
+        
+
         if "rlnMaskName" in md.getLabels() and it.rlnMaskName is not None:
             with mrcfile.open(it.rlnMaskName) as m:
                 mask_data = m.data
@@ -88,19 +96,33 @@ def extract_subtomos(settings):
 
 #preparation files for the first iteration
 def prepare_first_iter(settings):
-    extract_subtomos(settings)
-    settings.mrc_list = os.listdir(settings.subtomo_dir)
-    settings.mrc_list = ['{}/{}'.format(settings.subtomo_dir,i) for i in settings.mrc_list]
+    # extract_subtomos(settings)
+    md = MetaData()
+    md.read(settings.subtomo_star)
+    if len(md) <=0:
+        logging.error("Subtomo list is empty!")
+        sys.exit(0)
+    settings.mrc_list = []
+    for i,it in enumerate(md):
+        if "rlnImageName" in md.getLabels():
+            settings.mrc_list.append(it.rlnImageName)
+        if i == 0:
+            settings.crop_size = it.rlnCropSize
+            settings.cube_size = it.rlnCubeSize
+    # settings.mrc_list = os.listdir(settings.subtomo_dir)
+    # settings.mrc_list = ['{}/{}'.format(settings.subtomo_dir,i) for i in settings.mrc_list]
+
     #need further test
     #with Pool(settings.preprocessing_ncpus) as p:
     #    func = partial(generate_first_iter_mrc, settings)
     #    res = p.map(func, settings.mrc_list)
-    if settings.preprocessing_ncpus >1 and not settings.only_extract_subtomos:
+
+    if settings.preprocessing_ncpus >1:
         with Pool(settings.preprocessing_ncpus) as p:
             func = partial(generate_first_iter_mrc, settings=settings)
             res = p.map(func, settings.mrc_list)
             # res = p.map(generate_first_iter_mrc, settings.mrc_list)
-    elif not settings.only_extract_subtomos:
+    else:
         for i in settings.mrc_list:
             generate_first_iter_mrc(i,settings)
 

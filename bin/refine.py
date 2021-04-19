@@ -19,7 +19,7 @@ def run(args):
     args.predict_batch_size = args.batch_size
     args.noise_dir = None
     args.lr = 0.0004
-    args.subtomo_dir = args.result_dir + '/subtomo'
+    #args.subtomo_dir = args.result_dir + '/subtomo'
     #if args.log_level == "debug":
     #    logging.basicConfig(format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt="%H:%M:%S",level=logging.DEBUG)
     #else:

@@ -18,7 +18,7 @@ class ISONET:
     isonet.py predict
     """
     def refine(self,
-        star_file: str = None,
+        subtomo_star: str = None,
         gpuID: str = '0,1,2,3',
         iterations: int = 50,
         data_dir: str = "data",
@@ -26,9 +26,9 @@ class ISONET:
         log_level: str = "info",
         continue_iter: int = 0,
 
-        cube_size: int = 64,
-        crop_size: int = 96,
-        ncube: int = 1,
+        # cube_size: int = 64,
+        # crop_size: int = 96,
+        # ncube: int = 1,
         preprocessing_ncpus: int = 16,
 
         epochs: int = 10,
@@ -103,7 +103,7 @@ class ISONET:
             logging.basicConfig(format='%(asctime)s, %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt="%m-%d %H:%M:%S",level=logging.INFO)
 
         logger = logging.getLogger('IsoNet.bin.refine')
-        d_args.only_extract_subtomos = False
+        # d_args.only_extract_subtomos = False
         run(d_args)
 
     def predict(self, mrc_file: str, output_file: str, model: str, gpuID: str = None, cube_size:int=48,crop_size:int=64, batch_size:int=8,norm: bool=True,log_level: str="debug",Ntile:int=1):
@@ -269,9 +269,10 @@ class ISONET:
         deconv_folder:str="deconv", 
         snrfalloff: float=None, 
         deconvstrength: float=None, 
-        tile: tuple=(1,4,4),ncpu:int=4,
+        tile: tuple=(1,4,4),
+        ncpu:int=4,
         tomo_idx: str=None):
-        from IsoNet.utils.deconvolution import deconv_one
+        from IsoNet.util.deconvolution import deconv_one
         md = MetaData()
         md.read(star_file)
         if not 'rlnSnrFalloff' in md.getLabels():
@@ -336,8 +337,54 @@ class ISONET:
             # f.write(str(i+1)+' ' + os.path.join(folder_name,tomo) + '\n')
         md.write(output_star)
 
+    def prepare_subtomo_star(self, folder_name, output_star='subtomo.star', cube_size = None):
+        """
+        \nGenerate recommanded parameters for "isonet.py refine" for users\n
+        if is phase plate, keep defocus 0.0 if defocus different change manually in the output tomogram.star
+        Only print command, not run it.
+        :param input_dir: (None) directory containing tomogram(s) from which subtomos are extracted; format: .mrc or .rec
+        :param mask_dir: (None) folder containing mask files, Eash mask file corresponds to one tomogram file, usually basename-mask.mrc
+        :param ncpu: (10) number of avaliable cpu cores
+        :param ngpu: (4) number of avaliable gpu cards
+        :param gpu_memory: (10) memory of each gpu
+        :param pixel_size: (10) pixel size in anstroms
+        :param: also_denoise: (True) Preform denoising after 15 iterations when set true
+        """       
+        #TODO check folder valid
+        if not os.path.isdir(folder_name):
+            print("the folder does not exist")
+        import mrcfile
+        md = MetaData()
+        md.addLabels('rlnSubtomoIndex','rlnImageName','rlnCubeSize','rlnCropSize')
+        subtomo_list = sorted(os.listdir(folder_name))
+        for i,subtomo in enumerate(subtomo_list):
+            subtomo_name = os.path.join(folder_name,subtomo)
+            try: 
+                with mrcfile.open(subtomo_name, mode='r') as s:
+                    crop_size = s.header.nx
+            except:
+                print("Warning: Can not process the subtomogram: {}!".format(subtomo_name))
+                continue
+            if cube_size is not None:
+                cube_size = int(cube_size)
+                if cube_size >= crop_size:
+                    cube_size = int(crop_size / 1.5 + 1)//16 * 16
+                    print("Warning: Cube size should be smaller than the size of subtomogram volume! Using cube size {}!".format(cube_size))
+            else:
+                cube_size = int(crop_size / 1.5 + 1)//16 * 16
+            it = Item()
+            md.addItem(it)
+            md._setItemValue(it,Label('rlnSubtomoIndex'),str(i+1))
+            md._setItemValue(it,Label('rlnImageName'),subtomo_name)
+            md._setItemValue(it,Label('rlnCubeSize'),cube_size)
+            md._setItemValue(it,Label('rlnCropSize'),crop_size)
+
+            # f.write(str(i+1)+' ' + os.path.join(folder_name,tomo) + '\n')
+        md.write(output_star)
+
     def extract(self,
         star_file: str = None,
+        use_deconv_tomo: bool = True,
         subtomo_dir: str = "subtomo",
         subtomo_star: str = "subtomo.star",
         cube_size: int = 64,
