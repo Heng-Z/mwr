@@ -127,15 +127,7 @@ class ISONET:
         d_args = Arg(d)
         predict(d_args)
 
-    def make_mask(self,star_file,
-        mask_path: str = 'mask',
-        side: int=8,
-        percentile: int=None,
-        threshold: int=None,
-        use_deconv_tomo: bool=True,
-        mask_type: str="statistical",
-
-        tomo_idx: str=None):
+    def make_mask(self,tomo_path,mask_path: str = None,side: int=8,percentile: int=30,threshold: float=1.0,surface:int=None):
         """
         generate a mask to constrain sampling area of the tomogram
         :param tomo_path: path to the tomogram or tomogram folder
@@ -184,7 +176,7 @@ class ISONET:
                             side=side,
                             percentile=it.rlnMaskPercentile,
                             threshold=it.rlnMaskThreshold,
-                            mask_type=mask_type)
+                            surface = surface)
                 
                 md._setItemValue(it,Label('rlnMaskName'),mask_out_name)
         md.write(star_file)
