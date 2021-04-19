@@ -127,7 +127,7 @@ class ISONET:
         d_args = Arg(d)
         predict(d_args)
 
-    def make_mask(self,tomo_path,mask_path: str = None,side: int=8,percentile: int=99,threshold: int=1,mask_type: str="statistical"):
+    def make_mask(self,tomo_path,mask_path: str = None,side: int=8,percentile: int=30,threshold: float=1.0,surface:int=None):
         """
         generate a mask to constrain sampling area of the tomogram
         :param tomo_path: path to the tomogram or tomogram folder
@@ -139,14 +139,14 @@ class ISONET:
         """
         from IsoNet.bin.make_mask import make_mask,make_mask_dir
         if os.path.isdir(tomo_path):
-            make_mask_dir(tomo_path,mask_path,side=side,percentile=percentile,threshold=threshold,mask_type=mask_type)
+            make_mask_dir(tomo_path,mask_path,side=side,percentile=percentile,threshold=threshold,surface=surface)
         
         elif os.path.isfile(tomo_path):
             if mask_path is None:
                 mask_path = tomo_path.split('.')[0]+'_mask.mrc'
                 print(mask_path)
 
-            make_mask(tomo_path,mask_path,side=side,percentile=percentile,threshold=threshold,mask_type=mask_type)
+            make_mask(tomo_path,mask_path,side=side,percentile=percentile,threshold=threshold)
         else:
             print('make_mask tomo_path error')
         print('mask generated')
