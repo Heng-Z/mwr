@@ -110,11 +110,14 @@ class Chunks:
             self.num = num
 
     def get_chunks(self,vol):
-        #side*(1-overlap)*(num-1)+side = sh
-        sp = vol.shape
-        cube_size = np.round(np.array(vol.shape)/(1+(1-self.overlap)*(np.array(self.num)-1))).astype(np.uint16)
-        overlap_len = np.round(cube_size*self.overlap).astype(np.uint16)
+        #side*(1-overlap)*(num-1)+side = sp + side*overlap -> side *(1-overlap) * num = side
+        
+        cube_size = np.round(np.array(vol.shape)/((1-self.overlap)*np.array(self.num))).astype(np.int16)
+        overlap_len = np.round(cube_size*self.overlap).astype(np.int16)
+        overlap_len = overlap_len + overlap_len %2
         eff_len = cube_size-overlap_len
+        padded_vol = np.pad(vol,pad_width=[(ol//2,ol//2) for ol in overlap_len],mode='symmetric')
+        sp = padded_vol.shape
         chunks_list = []
         slice1 = [(i*eff_len[0],i*eff_len[0]+cube_size[0]) for i in range(self.num[0]-1)]
         slice1.append(((self.num[0]-1)*eff_len[0],sp[0]))
@@ -122,28 +125,42 @@ class Chunks:
         slice2.append(((self.num[1]-1)*eff_len[1],sp[1]))
         slice3 = [(i*eff_len[2],i*eff_len[2]+cube_size[2]) for i in range(self.num[2]-1)]
         slice3.append(((self.num[2]-1)*eff_len[2],sp[2]))
-
+        # print(slice1)
+        # print(slice2)
+        # print(slice3)
         for i in slice1:
             for j in slice2:
                 for k in slice3:
-                    one_chunk = vol[i[0]:i[1],j[0]:j[1],k[0]:k[1]]
+                    one_chunk = padded_vol[i[0]:i[1],j[0]:j[1],k[0]:k[1]]
                     chunks_list.append(one_chunk)
-        self.shape = sp
+        self.shape = vol.shape
+        self.padded_shape = sp
         self.slice1 = slice1
         self.slice2 = slice2
         self.slice3 = slice3
+        self.overlap_len = overlap_len
         return chunks_list
 
     def restore(self,new_list):
-        new_vol = np.zeros(self.shape,dtype=type(new_list[0][0,0,0]))
-        factor_vol = np.zeros(self.shape,dtype=type(new_list[0][0,0,0]))
+        overlap_len = self.overlap_len
+        new_vol = np.zeros(self.padded_shape,dtype=type(new_list[0][0,0,0]))
+        factor_vol = np.zeros(self.padded_shape,dtype=type(new_list[0][0,0,0]))
         for n1,i in enumerate(self.slice1):
             for n2,j in enumerate(self.slice2):
                 for n3,k in enumerate(self.slice3):
-                    new_vol[i[0]:i[1],j[0]:j[1],k[0]:k[1]] += new_list[n1*len(self.slice2)*len(self.slice3)+n2*len(self.slice3)+n3]
-                    factor_vol[i[0]:i[1],j[0]:j[1],k[0]:k[1]] += np.ones(factor_vol[i[0]:i[1],j[0]:j[1],k[0]:k[1]].shape)
+                    print(n1,n2,n3)
+                    one_chuck = new_list[n1*len(self.slice2)*len(self.slice3)+n2*len(self.slice3)+n3]
+                    print(one_chuck[overlap_len[0]//2:-(overlap_len[0]//2),overlap_len[1]//2:-(overlap_len[1]//2),overlap_len[2]//2:-(overlap_len[2]//2)].shape)
+                    print(one_chuck.shape)
+                    new_vol[i[0]+overlap_len[0]//2:i[1]-overlap_len[0]//2,j[0]+overlap_len[1]//2:j[1]-overlap_len[1]//2, 
+                    k[0]+overlap_len[2]//2:k[1]-overlap_len[2]//2] = one_chuck[overlap_len[0]//2:-(overlap_len[0]//2),overlap_len[1]//2:-(overlap_len[1]//2),overlap_len[2]//2:-(overlap_len[2]//2)]
+                    # factor_vol[i[0]:i[1],j[0]:j[1],k[0]:k[1]] += np.ones(factor_vol[i[0]:i[1],j[0]:j[1],k[0]:k[1]].shape)
+        
          
-        return np.multiply(new_vol,1/factor_vol)
+        # return np.multiply(new_vol,1/factor_vol)
+        return new_vol[overlap_len[0]//2:-(overlap_len[0]//2),
+                    overlap_len[1]//2:-(overlap_len[1]//2),
+                    overlap_len[2]//2:-(overlap_len[2]//2)]
 
                     
 if __name__ == '__main__':
