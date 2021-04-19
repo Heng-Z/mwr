@@ -271,7 +271,7 @@ class ISONET:
         deconvstrength: float=None, 
         tile: tuple=(1,4,4),ncpu:int=4,
         tomo_idx: str=None):
-        from IsoNet.utils.deconvolution import deconv_one
+        from IsoNet.util.deconvolution import deconv_one
         md = MetaData()
         md.read(star_file)
         if not 'rlnSnrFalloff' in md.getLabels():
@@ -281,7 +281,7 @@ class ISONET:
                 md._setItemValue(it,Label('rlnDeconvStrength'),1.0)
                 md._setItemValue(it,Label('rlnDeconvTomoName'),None)
 
-        if os.path.isdir(deconv_folder):
+        if not os.path.isdir(deconv_folder):
             os.mkdir(deconv_folder)
 
         if tomo_idx is not None:
@@ -304,12 +304,11 @@ class ISONET:
                     deconv_tomo_name = '{}/{}'.format(deconv_folder,base_name)
                 else:
                     deconv_tomo_name = it.rlnDeconvTomoName
-
-                deconv_one(deconv_tomo_name,defocus=it.rlnDefocus, pixel_size=it.rlnPixelSize,snrfalloff=it.rlnSnrFalloff, deconvstrength=it.rlnDeconvStrength,tile=tile,ncpu=ncpu)
+                deconv_one(it.rlnMicrographName,deconv_tomo_name,defocus=it.rlnDefocus, pixel_size=it.rlnPixelSize,snrfalloff=it.rlnSnrFalloff, deconvstrength=it.rlnDeconvStrength,tile=tile,ncpu=ncpu)
                 md._setItemValue(it,Label('rlnDeconvTomoName'),deconv_tomo_name)
         md.write(star_file)
 
-    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0, defocus = 0.0, number_subtomos = 200):
+    def prepare_star(self,folder_name,output_star='tomograms.star',pixel_size = 10.0, defocus = 1.0, number_subtomos = 200):
         """
         \nGenerate recommanded parameters for "isonet.py refine" for users\n
         if is phase plate, keep defocus 0.0 if defocus different change manually in the output tomogram.star
