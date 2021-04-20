@@ -33,6 +33,7 @@ LABELS = {
     'rlnDeconvStrength':float,
     'rlnPixelSize':float,
     'rlnDefocus':float,
+    'rlnCorrectedTomoName':str,
     'rlnNumberSubtomo': int,
     'rlnMaskName': str,
     'rlnVoltage': float,

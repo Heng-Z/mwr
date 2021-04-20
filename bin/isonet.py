@@ -2,7 +2,7 @@
 import fire
 import logging
 import os
-from IsoNet.util.dict2attr import Arg,check_args
+from IsoNet.util.dict2attr import Arg,check_args,idx2str
 import sys
 from fire import core
 import time
@@ -106,7 +106,7 @@ class ISONET:
         # d_args.only_extract_subtomos = False
         run(d_args)
 
-    def predict(self, mrc_file: str, output_file: str, model: str, gpuID: str = None, cube_size:int=48,crop_size:int=64, batch_size:int=8,norm: bool=True,log_level: str="debug",Ntile:int=1):
+    def predict(self, star_file: str, model: str, output_dir: str='./corrected_tomos', gpuID: str = None, cube_size:int=48,crop_size:int=64,use_deconv_tomo=True, batch_size:int=8,norm: bool=True,log_level: str="info",Ntile:int=1,tomo_idx=None):
         """
         Predict tomograms using trained model including model.json and weight(xxx.h5)
         :param mrc_file: path to tomogram, format: .mrc or .rec
@@ -121,10 +121,13 @@ class ISONET:
         :param Ntile: divide data into Ntile part and then predict. 
         :raises: AttributeError, KeyError
         """
-        from IsoNet.bin.predict import predict
         d = locals()
-
         d_args = Arg(d)
+        from IsoNet.bin.predict import predict
+        if d_args.log_level == "debug":
+            logging.basicConfig(format='%(asctime)s, %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',datefmt="%H:%M:%S",level=logging.DEBUG)
+        else:
+            logging.basicConfig(format='%(asctime)s, %(levelname)-8s %(message)s',datefmt="%m-%d %H:%M:%S",level=logging.INFO)
         predict(d_args)
 
     def make_mask(self,star_file,mask_path: str = None,side: int=4,percentile: int=30,threshold: float=1.0,use_deconv_tomo:bool=True,surface:int=None,tomo_idx=None):
@@ -150,13 +153,7 @@ class ISONET:
                 md._setItemValue(it,Label('rlnMaskThreshold'),0.85)
                 md._setItemValue(it,Label('rlnMaskName'),None)
 
-        if tomo_idx is not None:
-            if type(tomo_idx) is tuple:
-                tomo_idx = list(map(str,tomo_idx))
-            elif type(tomo_idx) is int:
-                tomo_idx = [str(tomo_idx)]
-            else:
-                tomo_idx = tomo_idx.split(',')
+        tomo_idx = idx2str(tomo_idx)
         for it in md:
             if tomo_idx is None or str(it.rlnIndex) in tomo_idx:
                 if percentile is not None:
@@ -268,6 +265,7 @@ class ISONET:
         deconvstrength: float=None, 
         highpassnyquist: float=0.1,
         tile: tuple=(1,4,4),
+        overlap_rate = 0.25,
         ncpu:int=4,
         tomo_idx: str=None):
         from IsoNet.util.deconvolution import deconv_one

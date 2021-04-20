@@ -24,3 +24,14 @@ def check_args(args):
         if i not in param_list:
             pass
             # logging.warning("{} not recognized!".format(i))
+
+def idx2str(tomo_idx):
+    if tomo_idx is not None:
+            if type(tomo_idx) is tuple:
+                tomo_idx = list(map(str,tomo_idx))
+            elif type(tomo_idx) is int:
+                tomo_idx = [str(tomo_idx)]
+            else:
+                tomo_idx = tomo_idx.split(',')
+
+    return tomo_idx

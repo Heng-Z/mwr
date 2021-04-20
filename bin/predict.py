@@ -7,24 +7,21 @@ from IsoNet.util.norm import normalize
 from IsoNet.util.toTile import reform3D
 import mrcfile
 from IsoNet.util.image import *
-
-
+from IsoNet.util.metadata import MetaData,Label,Item
+from IsoNet.util.dict2attr import idx2str
 def predict(args):
+
     if args.log_level == 'debug':
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
     else:
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     import tensorflow as tf
-    from tensorflow.keras.models import load_model
-    logger = tf.get_logger()
-    logger.setLevel(logging.ERROR)
 
-    #logging.basicConfig(format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    #datefmt='%Y-%m-%d:%H:%M:%S')
-    #if args.log_level == "debug":
-    #    logging.basicConfig(level=logging.DEBUG)
-    #logger = logging.getLogger(__name__)
+    import logging
+    tf_logger = tf.get_logger()
+    tf_logger.setLevel(logging.ERROR)
 
+    logger = logging.getLogger('predict')
     args.gpuID = str(args.gpuID)
     ngpus = len(args.gpuID.split(','))
     os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
@@ -37,19 +34,35 @@ def predict(args):
     if ngpus >1:
         strategy = tf.distribute.MirroredStrategy()
         with strategy.scope():
-            model = load_model(args.model)
+            model = tf.keras.models.load_model(args.model)
     else:
-        model = load_model(args.model)
+        model = tf.keras.models.load_model(args.model)
 
     logger.info("Loaded model from disk")
 
-    if os.path.isfile(args.mrc_file):
-        predict_one(args,args.mrc_file,model,output_file=args.output_file)
-    if os.path.isdir(args.mrc_file):
-        for tomo_str in os.listdir(args.mrc_file):
-            predict_one(args,args.mrc_file+'/'+tomo_str,model)
-
-
+    if not os.path.isdir(args.output_dir):
+            os.mkdir(args.output_dir)
+        # write star percentile threshold
+    md = MetaData()
+    md.read(args.star_file)
+    if not 'rlnCorrectedTomoName' in md.getLabels():    
+        md.addLabels('rlnCorrectedTomoName')
+        for it in md:
+            md._setItemValue(it,Label('rlnCorrectedTomoName'),None)
+    args.tomo_idx = idx2str(args.tomo_idx)
+    for it in md:
+        if args.tomo_idx is None or str(it.rlnIndex) in args.tomo_idx:
+            if args.use_deconv_tomo and "rlnDeconvTomoName" in md.getLabels():
+                tomo_file = it.rlnDeconvTomoName
+            else:
+                tomo_file = it.rlnMicrographName
+            tomo_root_name = os.path.splitext(os.path.basename(tomo_file))[0]
+            if os.path.isfile(tomo_file):
+                tomo_out_name = '{}/{}_corrected.mrc'.format(args.output_dir,tomo_root_name)
+                predict_one(args,tomo_file,model,output_file=tomo_out_name)
+                md._setItemValue(it,Label('rlnCorrectedTomoName'),tomo_out_name)
+    md.write(args.star_file)
+    
 def predict_one(args,one_tomo,model,output_file=None):
     #predict one tomogram in mrc format INPUT: mrc_file string OUTPUT: output_file(str) or <root_name>_corrected.mrc
 

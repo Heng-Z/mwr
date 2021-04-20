@@ -31,7 +31,7 @@ def wiener1d(angpix, defocus, snrfalloff, deconvstrength, highpassnyquist, phase
     highpass = np.minimum(np.ones(data.shape[0]), data/highpassnyquist) * np.pi
     highpass = 1-np.cos(highpass)
 
-    snr = np.exp(-data * snrfalloff * 100 / angpix) * (10^(3 * deconvstrength)) * highpass
+    snr = np.exp(-data * snrfalloff * 100 / angpix) * (10 ** deconvstrength) * highpass
     #snr[0] = -1
     ctf = tom_ctf1d(angpix*1e-10, 300e3, 2.7e-3, -defocus*1e-6, 0.07, phaseshift / 180 * np.pi, 0)
     if phaseflipped:
@@ -44,16 +44,16 @@ def tom_deconv_tomo(vol_file, angpix, defocus, snrfalloff, deconvstrength, highp
     with mrcfile.open(vol_file) as f:
         vol = f.data
     data = np.arange(0,1+1/2047.,1/2047.)
-    highpass = np.minimum(np.ones(data.shape[0]), data/highpassnyquist) * np.pi
-    highpass = 1-np.cos(highpass)
-    eps = 1e-10
-    snr = np.exp(-data * snrfalloff * 100 / angpix) * np.power(10.0,(3.0 * deconvstrength)) * highpass + eps; 
+    highpass = np.minimum(np.ones(data.shape[0]), data/highpassnyquist) * np.pi;
+    highpass = 1-np.cos(highpass);
+    eps = 1e-6
+    snr = np.exp(-data * snrfalloff * 100 / angpix) * (10**deconvstrength) * highpass + eps
     #snr[0] = -1
-    ctf = tom_ctf1d(angpix*1e-10, 300e3, 2.7e-3, -defocus*1e-6, 0.07, phaseshift / 180 * np.pi, 0)
+    ctf = tom_ctf1d(angpix*1e-10, 300e3, 2.7e-3, -defocus*1e-6, 0.07, phaseshift / 180 * np.pi, 0);
     if phaseflipped:
         ctf = abs(ctf)
 
-    wiener = ctf/(ctf*ctf+1/snr)
+    wiener = ctf/(ctf*ctf+1/snr);
 
     denom = ctf*ctf+1/snr
     #np.savetxt('den.txt',denom)
@@ -77,7 +77,7 @@ def tom_deconv_tomo(vol_file, angpix, defocus, snrfalloff, deconvstrength, highp
 #s3 = -floor(size(vol,3)/2);
 #f3 = s3 + size(vol,3) - 1;
     x, y, z = np.meshgrid(m1,m2,m3)
-    print(np.shape(x))
+    # print(np.shape(x))
     x = x.astype(np.float32) / np.abs(s1)
     y = y.astype(np.float32) / np.abs(s2)
     z = z.astype(np.float32) / np.maximum(1, np.abs(s3))
@@ -88,14 +88,14 @@ def tom_deconv_tomo(vol_file, angpix, defocus, snrfalloff, deconvstrength, highp
     r = np.fft.ifftshift(r)
 
     #x = 0:1/2047:1;
-    print(data.shape, wiener.shape, r.shape)
+    # print(data.shape, wiener.shape, r.shape)
     ramp = np.interp(r, data,wiener).astype(np.float32)
     del r
     #ramp = np.interp(data,wiener,r);
     deconv = np.real(np.fft.ifftn(np.fft.fftn(vol) * ramp))
 
     with mrcfile.new(os.path.splitext(vol_file)[0]+'_deconv.mrc',overwrite=True) as n:
-        n.set_data(deconv.astype(type(vol[0,0,0])))
+        n.set_data(deconv.astype(np.float32)) #.astype(type(vol[0,0,0]))
     #return real(ifftn(fftn(single(vol)).*ramp));
     return os.path.splitext(vol_file)[0]+'_deconv.mrc'
 
@@ -112,8 +112,7 @@ class Chunks:
         #side*(1-overlap)*(num-1)+side = sp + side*overlap -> side *(1-overlap) * num = side
         root_name = os.path.splitext(os.path.basename(tomo_name))[0]
         with mrcfile.open(tomo_name) as f:
-            vol = f.data.astype(np.float32)
-        print('in type:',type(vol[0,0,0]) )
+            vol = f.data#.astype(np.float32)
         cube_size = np.round(np.array(vol.shape)/((1-self.overlap)*np.array(self.num))).astype(np.int16)
         overlap_len = np.round(cube_size*self.overlap).astype(np.int16)
         overlap_len = overlap_len + overlap_len %2
@@ -149,16 +148,16 @@ class Chunks:
 
     def restore(self,new_file_list):
         overlap_len = self.overlap_len
-        new_vol = np.zeros(self.padded_shape,self.datatype)
+        new_vol = np.zeros(self.padded_shape,dtype = np.float32)
         for n1,i in enumerate(self.slice1):
             for n2,j in enumerate(self.slice2):
                 for n3,k in enumerate(self.slice3):
-                    print(n1,n2,n3)
+                    # print(n1,n2,n3)
                     one_chunk_file = new_file_list[n1*len(self.slice2)*len(self.slice3)+n2*len(self.slice3)+n3]
                     with mrcfile.open(one_chunk_file) as f:
                         one_chuck = f.data
-                    print(one_chuck[overlap_len[0]//2:-(overlap_len[0]//2),overlap_len[1]//2:-(overlap_len[1]//2),overlap_len[2]//2:-(overlap_len[2]//2)].shape)
-                    print(one_chuck.shape)
+                    # print(one_chuck[overlap_len[0]//2:-(overlap_len[0]//2),overlap_len[1]//2:-(overlap_len[1]//2),overlap_len[2]//2:-(overlap_len[2]//2)].shape)
+                    # print(one_chuck.shape)
                     new_vol[i[0]+overlap_len[0]//2:i[1]-overlap_len[0]//2,j[0]+overlap_len[1]//2:j[1]-overlap_len[1]//2, 
                     k[0]+overlap_len[2]//2:k[1]-overlap_len[2]//2] = one_chuck[overlap_len[0]//2:-(overlap_len[0]//2),overlap_len[1]//2:-(overlap_len[1]//2),overlap_len[2]//2:-(overlap_len[2]//2)]
                     
@@ -168,7 +167,7 @@ class Chunks:
                     overlap_len[1]//2:-(overlap_len[1]//2),
                     overlap_len[2]//2:-(overlap_len[2]//2)]
 
-def deconv_one(tomo, out_tomo,defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconvstrength=1.0,highpassnyquist=0.1,tile=(1,4,4),ncpu=4):
+def deconv_one(tomo, out_tomo,defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconvstrength=1.0,highpassnyquist=0.1,tile=(1,4,4),overlap_rate = 0.25,ncpu=4):
     """
     \nGenerate recommanded parameters for "isonet.py refine" for users\n
     if is phase plate, keep defocus 0.0 if defocus different change manually in the output tomogram.star
@@ -196,7 +195,7 @@ def deconv_one(tomo, out_tomo,defocus=1.0, pixel_size=1.0,snrfalloff=1.0, deconv
 
     root_name = os.path.splitext(os.path.basename(tomo))[0]
     print(tomo,'angpix:',pixel_size, 'defocus',defocus, 'snrfalloff',snrfalloff,'highpassnyquist',highpassnyquist)
-    c = Chunks(num=tile,overlap=0.25)
+    c = Chunks(num=tile,overlap=overlap_rate)
     chunks_list = c.get_chunks(tomo) # list of name of subtomograms
     # chunks_gpu_num_list = [[array,j%num_gpu] for j,array in enumerate(chunks_list)]
     # print(chunks_list)
