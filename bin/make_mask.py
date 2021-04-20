@@ -42,9 +42,9 @@ def make_mask(tomo_path, mask_name,side = 5,percentile=30,threshold=1.0,surface=
     out_mask_bin = np.multiply(mask1,mask2)
         # out_mask_bin = mask1
     if (surface is not None) and surface < 1:
-        for i in range(int(surface*sp[0])):
+        for i in range(int(surface*sp2[0])):
             out_mask_bin[i] = 0
-        for i in range(int((1-surface)*sp[0]),sp[0]):
+        for i in range(int((1-surface)*sp2[0]),sp2[0]):
             out_mask_bin[i] = 0
     out_mask = np.zeros(sp)
     out_mask[0:-1:2,0:-1:2,0:-1:2] = out_mask_bin

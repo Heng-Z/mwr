@@ -127,7 +127,7 @@ class ISONET:
         d_args = Arg(d)
         predict(d_args)
 
-    def make_mask(self,tomo_path,mask_path: str = None,side: int=8,percentile: int=30,threshold: float=1.0,surface:int=None):
+    def make_mask(self,star_file,mask_path: str = None,side: int=4,percentile: int=30,threshold: float=1.0,use_deconv_tomo:bool=True,surface:int=None,tomo_idx=None):
         """
         generate a mask to constrain sampling area of the tomogram
         :param tomo_path: path to the tomogram or tomogram folder
