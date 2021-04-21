@@ -87,7 +87,7 @@ def predict_one(args,one_tomo,model,output_file=None):
     #data=wedge_imposing(data)
 
     ngpus = len(args.gpuID.split(','))
-    N = args.batch_size * ngpus
+    N = args.batch_size * ngpus * args.Ntile
     num_patches = data.shape[0]
     if num_patches%N == 0:
         append_number = 0
@@ -95,11 +95,14 @@ def predict_one(args,one_tomo,model,output_file=None):
         append_number = N - num_patches%N
     data = np.append(data, data[0:append_number], axis = 0)
 
-    #outData = np.zeros(data.shape)
+    outData = np.zeros(data.shape)
     #for count in range(data.shape[0]//N):
     #    outData[count*N:count*N+N]=model.predict(data, batch_size= args.batch_size,verbose=1)
-
-    outData=model.predict(data, batch_size= args.batch_size,verbose=1)
+    global_batch = data.shape[0]//args.Ntile
+    for i in range(args.Ntile-1):
+        outData[i*global_batch:(i+1)*global_batch] = model.predict(data[i*global_batch:(i+1)*global_batch], batch_size= args.batch_size,verbose=1)
+    outData[(args.Ntile-1)*global_batch:] = model.predict(data[(args.Ntile-1)*global_batch:], batch_size= args.batch_size,verbose=1)
+    # outData=model.predict(data, batch_size= args.batch_size,verbose=1)
     outData = outData[0:num_patches]
 
     outData=reform_ins.restore_from_cubes_new(outData.reshape(outData.shape[0:-1]), args.cube_size, args.crop_size)
