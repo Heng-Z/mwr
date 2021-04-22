@@ -2,7 +2,7 @@
 import fire
 import logging
 import os
-from IsoNet.util.dict2attr import Arg,check_args,idx2str
+from IsoNet.util.dict2attr import Arg,check_args,idx2list
 import sys
 from fire import core
 import time
@@ -52,7 +52,7 @@ class ISONET:
             # f.write(str(i+1)+' ' + os.path.join(folder_name,tomo) + '\n')
         md.write(output_star)
 
-    def prepare_subtomo_star(self, folder_name, output_star='subtomo.star', cube_size = None):
+    def prepare_subtomo_star(self, folder_name, output_star='subtomo.star', pixel_size: float=10.0,cube_size = None):
         """
         \nThis command generates a subtomo.star file from a folder containing only subtomogram files (.mrc).
         This command is usually not necessary because "isonet.py extract" will generate this subtomo.star for you.\n
@@ -67,7 +67,7 @@ class ISONET:
             print("the folder does not exist")
         import mrcfile
         md = MetaData()
-        md.addLabels('rlnSubtomoIndex','rlnImageName','rlnCubeSize','rlnCropSize')
+        md.addLabels('rlnSubtomoIndex','rlnImageName','rlnCubeSize','rlnCropSize','rlnPixelSize')
         subtomo_list = sorted(os.listdir(folder_name))
         for i,subtomo in enumerate(subtomo_list):
             subtomo_name = os.path.join(folder_name,subtomo)
@@ -90,6 +90,7 @@ class ISONET:
             md._setItemValue(it,Label('rlnImageName'),subtomo_name)
             md._setItemValue(it,Label('rlnCubeSize'),cube_size)
             md._setItemValue(it,Label('rlnCropSize'),crop_size)
+            md._setItemValue(it,Label('rlnPixelSize'),pixel_size)
 
             # f.write(str(i+1)+' ' + os.path.join(folder_name,tomo) + '\n')
         md.write(output_star)
@@ -115,13 +116,13 @@ class ISONET:
         If this value is not set, the program will look for the parameter in the star file. 
         If this value is not set and not found in star file, the default value 1.0 will be used.
         :param highpassnyquist: (0.1) Keep this default value.
-        :param tile: ((1,4,4)) The program crop the tomogram in multiple tiles (z,y,x) for multiprocessing and assembly them into one. e.g. (1,2,2)
+        :param tile: (1,4,4) The program crop the tomogram in multiple tiles (z,y,x) for multiprocessing and assembly them into one. e.g. (1,2,2)
         :param overlap_rate: (None) The overlapping rate for adjecent tiles.
         :param ncpu: (4) Number of cpus to use. 
-        :param tomo_idx: (None) If this value is set, process only the tomograms listed in this index. e.g. 1,2,4  
+        :param tomo_idx: (None) If this value is set, process only the tomograms listed in this index. e.g. 1,2,4 or 5-10,15,16  
         """    
-        #TODO how to input tile information (1,2,2) or 1,2,2 should both be fine.
         from IsoNet.util.deconvolution import deconv_one
+        
         md = MetaData()
         md.read(star_file)
         if not 'rlnSnrFalloff' in md.getLabels():
@@ -133,16 +134,8 @@ class ISONET:
 
         if not os.path.isdir(deconv_folder):
             os.mkdir(deconv_folder)
-
-        #TODU use the fuction for parsing tomoidx
-        if tomo_idx is not None:
-            if type(tomo_idx) is tuple:
-                tomo_idx = list(map(str,tomo_idx))
-            elif type(tomo_idx) is int:
-                tomo_idx = [str(tomo_idx)]
-            else:
-                tomo_idx = tomo_idx.split(',')
-
+        
+        tomo_idx = idx2list(tomo_idx)
         for it in md:
             if tomo_idx is None or str(it.rlnIndex) in tomo_idx:
                 if snrfalloff is not None:
@@ -157,7 +150,7 @@ class ISONET:
                     deconv_tomo_name = it.rlnDeconvTomoName
                 deconv_one(it.rlnMicrographName,deconv_tomo_name,defocus=it.rlnDefocus/10000.0, pixel_size=it.rlnPixelSize,snrfalloff=it.rlnSnrFalloff, deconvstrength=it.rlnDeconvStrength,highpassnyquist=highpassnyquist,tile=tile,ncpu=ncpu)
                 md._setItemValue(it,Label('rlnDeconvTomoName'),deconv_tomo_name)
-        md.write(star_file)
+            md.write(star_file)
 
     def make_mask(self,star_file, 
                 mask_folder: str = 'mask', 
@@ -165,30 +158,28 @@ class ISONET:
                 percentile: int=30,
                 threshold: float=1.0,
                 use_deconv_tomo:bool=True,
-                surface:int=None,
+                z_crop:float=None,
                 tomo_idx=None):
         """
         \ngenerate a mask to include sample area and exclude "empty" area of the tomogram. The masks do not need to be precise. In general, the number of subtomograms (a value in star file) should be lesser if you masked out larger area. \n
         isonet.py make_mask star_file [--mask_folder] [--patch_size] [--percentile] [--threshold] [--use_deconv_tomo] [--tomo_idx]
         :param star_file: path to the tomogram or tomogram folder
         :param mask_folder: path and name of the mask to save as
-        :param patch_size: (8) The size of the box from which the max-filter and std-filter are calculated. 
+        :param patch_size: (4) The size of the box from which the max-filter and std-filter are calculated. 
         It is suggested to be set close to the size of interested particles. 
-        :param percentile: (99) The approximate percentage, ranging from 0 to 100, of the area of meaningful content in tomograms. 
+        :param percentile: (30) The approximate percentage, ranging from 0 to 100, of the area of meaningful content in tomograms. 
         If this value is not set, the program will look for the parameter in the star file. 
         If this value is not set and not found in star file, the default value 99 will be used.
-        :param threshold: (1) A factor of overall standard deviation and its default value is 1. 
+        :param threshold: (1.0) A factor of overall standard deviation and its default value is 1. 
         This parameter only affect the std-mask. 
         Make the threshold smaller (larger) when you want to enlarge (shrink) mask area. 
         When you don't want to use the std-mask, set the value to 0.
         If this value is not set, the program will look for the parameter in the star file. 
         If this value is not set and not found in star file, the default value 1.0 will be used.      
         :param use_deconv_tomo: (True) If CTF deconvolved tomogram is found in tomogram.star, use that tomogram instead. 
-        :param surface: 'statistical' or 'surface': Masks can be generated based on the statistics or just take the middle part of tomograms
-        :param tomo_idx: (None) If this value is set, process only the tomograms listed in this index. e.g. 1,2,4  
+        :param z_crop: If exclude the top and bottum regions of tomograms along z axis. For example, "--z_crop 0.2" will mask out the top 20% and bottum 20% region along z axis. 
+        :param tomo_idx: (None) If this value is set, process only the tomograms listed in this index. e.g. 1,2,4 or 5-10,15,16   
         """
-        #TODO patch _size 4 or 8
-        #TODO what is the useage of surface? and what is the type of that?
         #TODO the meaning of the parameter is not intuitive.
         from IsoNet.bin.make_mask import make_mask
         if not os.path.isdir(mask_folder):
@@ -203,7 +194,7 @@ class ISONET:
                 md._setItemValue(it,Label('rlnMaskThreshold'),0.85)
                 md._setItemValue(it,Label('rlnMaskName'),None)
 
-        tomo_idx = idx2str(tomo_idx)
+        tomo_idx = idx2list(tomo_idx)
         for it in md:
             if tomo_idx is None or str(it.rlnIndex) in tomo_idx:
                 if percentile is not None:
@@ -223,13 +214,13 @@ class ISONET:
                             side=patch_size,
                             percentile=it.rlnMaskPercentile,
                             threshold=it.rlnMaskThreshold,
-                            surface = surface)
+                            surface = z_crop)
                 
                 md._setItemValue(it,Label('rlnMaskName'),mask_out_name)
-        md.write(star_file)
+            md.write(star_file)
 
     def extract(self,
-        star_file: str = None,
+        star_file: str,
         use_deconv_tomo: bool = True,
         subtomo_folder: str = "subtomo",
         subtomo_star: str = "subtomo.star",
@@ -248,7 +239,6 @@ class ISONET:
         The actual sizes of extracted subtomograms are 1.5 times of this value.
         :param use_deconv_tomo: (True) If CTF deconvolved tomogram is found in tomogram.star, use that tomogram instead. 
         """
-        #TODO whether "" is necessary
 
         d = locals()
         d_args = Arg(d)
@@ -281,7 +271,7 @@ class ISONET:
         preprocessing_ncpus: int = 16,
 
         epochs: int = 10,
-        batch_size: int = 8,
+        batch_size: int = None,
         steps_per_epoch: int = 100,
 
         noise_level:  float= 0.05,
@@ -293,7 +283,7 @@ class ISONET:
         kernel: tuple = (3,3,3),
         pool: tuple = None,
         unet_depth: int = 3,
-        filter_base: int = 64,
+        filter_base: int = None,
         batch_normalization: bool = False,
         normalize_percentile: bool = True,
     ):
@@ -315,7 +305,7 @@ class ISONET:
         ************************Training settings************************
 
         :param epochs: (10) Number of epoch for each iteraction.
-        :param batch_size: (8) Size of the minibatch.
+        :param batch_size: (None) Size of the minibatch.If None, batch_size will be the max(2 * number_of_gpu,4). batch_size should be divisible by the number of gpu.
         :param steps_per_epoch: (100) Step per epoch. A good estimation of this value is tomograms * ncube * 16 / batch_size *0.9.")
 
         ************************Denoise settings************************
@@ -339,7 +329,7 @@ class ISONET:
         2. Continue train with previous interupted model
         3. Continue train with pre-trained model
         """
-
+        #TODO: Test rotation list 16/20
         from IsoNet.bin.refine import run
         d = locals()
         d_args = Arg(d)
@@ -368,6 +358,7 @@ class ISONET:
         :param norm: (True) if normalize the tomograms by percentile
         :param log_level: ("debug") level of message to be displayed
         :param Ntile: divide data into Ntile part and then predict. 
+        :param tomo_idx: (None) If this value is set, process only the tomograms listed in this index. e.g. 1,2,4 or 5-10,15,16  
         :raises: AttributeError, KeyError
         """
         d = locals()
@@ -378,81 +369,6 @@ class ISONET:
         else:
             logging.basicConfig(format='%(asctime)s, %(levelname)-8s %(message)s',datefmt="%m-%d %H:%M:%S",level=logging.INFO)
         predict(d_args)
-
-    def generate_command(self, tomo_dir: str, mask_dir: str=None, ncpu: int=10, gpu_memory: int=10, ngpu: int=4, pixel_size: float=10, also_denoise: bool=True):
-        """
-        \nGenerate recommanded parameters for "isonet.py refine" for users\n
-        Only print command, not run it.
-        :param input_dir: (None) directory containing tomogram(s) from which subtomos are extracted; format: .mrc or .rec
-        :param mask_dir: (None) folder containing mask files, Eash mask file corresponds to one tomogram file, usually basename-mask.mrc
-        :param ncpu: (10) number of avaliable cpu cores
-        :param ngpu: (4) number of avaliable gpu cards
-        :param gpu_memory: (10) memory of each gpu
-        :param pixel_size: (10) pixel size in anstroms
-        :param: also_denoise: (True) Preform denoising after 15 iterations when set true
-        """
-        import mrcfile
-        import numpy as np
-        s="isonet.py refine --input_dir {} ".format(tomo_dir)
-        if mask_dir is not None:
-            s+="--mask_dir {} ".format(mask_dir)
-            m=os.listdir(mask_dir)
-            with mrcfile.open(mask_dir+"/"+m[0]) as mrcData:
-                mask_data = mrcData.data
-            # vsize=np.count_nonzero(mask_data)
-        else:
-            m=os.listdir(tomo_dir)
-            with mrcfile.open(tomo_dir+"/"+m[0]) as mrcData:
-                tomo_data = mrcData.data
-            sh=tomo_data.shape
-            mask_data = np.ones(sh)
-        num_tomo = len(m)
-
-        s+="--preprocessing_ncpus {} ".format(ncpu)
-        s+="--gpuID "
-        for i in range(ngpu-1):
-            s+=str(i)
-            s+=","
-        s+=str(ngpu-1)
-        s+=" "
-        if pixel_size < 15.0:
-            filter_base = 64
-            s+="--filter_base 64 "
-        else:
-            filter_base = 32
-            s+="--filter_base 32"
-#        if ngpu < 6:
-#            batch_size = 2 * ngpu
-#            s+="--batch_size {} ".format(batch_size)
-        # elif ngpu == 3:
-        #     batch_size = 6
-        #     s+="--batch_size 6 "
- #       else:
-        batch_size = (int(ngpu/7.0)+1) * ngpu
-        s+="--batch_size {} ".format(ngpu)
-        if filter_base==64:
-            cube_size = int((gpu_memory/(batch_size/ngpu)) ** (1/3.0) *40 /16)*16
-        elif filter_base ==32:
-            cube_size = int((gpu_memory*3/(batch_size/ngpu)) ** (1/3.0) *40 /16)*16
-
-        if cube_size == 0:
-            print("Please use larger memory GPU or use more GPUs")
-
-        s+="--cube_size {} --crop_size {} ".format(cube_size, int(cube_size*1.5))
-
-        # num_per_tomo = int(vsize/(cube_size**3) * 0.5)
-        from IsoNet.preprocessing.cubes import mask_mesh_seeds
-        num_per_tomo = len(mask_mesh_seeds(mask_data,cube_size,threshold=0.1))
-        s+="--ncube {} ".format(num_per_tomo)
-
-        num_particles = int(num_per_tomo * num_tomo * 16 * 0.9)
-        s+="--epochs 10 --steps_per_epoch {} ".format(int(num_particles/batch_size*0.4))
-
-        if also_denoise:
-            s+="--iterations 40 --noise_level 0.05 --noise_start_iter 15 --noise_pause 3"
-        else:
-            s+="--iterations 15 --noise_level 0 --noise_start_iter 100"
-        print(s)
   
     def check(self):
         from IsoNet.bin.predict import predict

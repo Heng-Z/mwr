@@ -8,7 +8,7 @@ from IsoNet.util.toTile import reform3D
 import mrcfile
 from IsoNet.util.image import *
 from IsoNet.util.metadata import MetaData,Label,Item
-from IsoNet.util.dict2attr import idx2str
+from IsoNet.util.dict2attr import idx2list
 def predict(args):
 
     if args.log_level == 'debug':
@@ -49,7 +49,7 @@ def predict(args):
         md.addLabels('rlnCorrectedTomoName')
         for it in md:
             md._setItemValue(it,Label('rlnCorrectedTomoName'),None)
-    args.tomo_idx = idx2str(args.tomo_idx)
+    args.tomo_idx = idx2list(args.tomo_idx)
     for it in md:
         if args.tomo_idx is None or str(it.rlnIndex) in args.tomo_idx:
             if args.use_deconv_tomo and "rlnDeconvTomoName" in md.getLabels():
@@ -61,7 +61,7 @@ def predict(args):
                 tomo_out_name = '{}/{}_corrected.mrc'.format(args.output_dir,tomo_root_name)
                 predict_one(args,tomo_file,model,output_file=tomo_out_name)
                 md._setItemValue(it,Label('rlnCorrectedTomoName'),tomo_out_name)
-    md.write(args.star_file)
+        md.write(args.star_file)
     
 def predict_one(args,one_tomo,model,output_file=None):
     #predict one tomogram in mrc format INPUT: mrc_file string OUTPUT: output_file(str) or <root_name>_corrected.mrc

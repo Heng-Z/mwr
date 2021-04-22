@@ -54,10 +54,12 @@ def extract_subtomos(settings):
         sys.exit("No input exists. Please check it in input folder!")
 
     subtomo_md = MetaData()
-    subtomo_md.addLabels('rlnSubtomoIndex','rlnImageName','rlnCubeSize','rlnCropSize')
+    subtomo_md.addLabels('rlnSubtomoIndex','rlnImageName','rlnCubeSize','rlnCropSize','rlnPixelSize')
     count=0
     for it in md:
-        if settings.use_deconv_tomo and "rlnDeconvTomoName" in md.getLabels():
+        pixel_size = it.rlnPixelSize
+        if settings.use_deconv_tomo and "rlnDeconvTomoName" in md.getLabels() and os.path.isfile(it.rlnDeconvTomoName):
+            print('it.rlnDeconvTomoName',type(it.rlnDeconvTomoName),it.rlnDeconvTomoName)
             print("Extract from deconvolved tomogram {}".format(it.rlnDeconvTomoName))
             with mrcfile.open(it.rlnDeconvTomoName) as mrcData:
                 orig_data = mrcData.data.astype(np.float32)
@@ -90,6 +92,7 @@ def extract_subtomos(settings):
                 subtomo_md._setItemValue(subtomo_it,Label('rlnImageName'), im_name)
                 subtomo_md._setItemValue(subtomo_it,Label('rlnCubeSize'),settings.cube_size)
                 subtomo_md._setItemValue(subtomo_it,Label('rlnCropSize'),settings.crop_size)
+                subtomo_md._setItemValue(subtomo_it,Label('rlnPixelSize'),pixel_size)
                 output_mrc.set_data(s.astype(np.float32))
     subtomo_md.write(settings.subtomo_star)
 
