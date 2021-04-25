@@ -13,7 +13,8 @@ def Unet(filter_base=32,
         pool=(2,2,2),residual = True,
         last_activation = 'linear',
         loss = 'mae',
-        lr = 0.0004):
+        lr = 0.0004,
+        test_shape=None):
 
     # model = builder.build_unet(filter_base,depth,convs_per_depth,
     #            kernel,
@@ -33,7 +34,10 @@ def Unet(filter_base=32,
     # model = builder_fullconv_old.build_unet(train_settings)
     
     #***** Construct complete model from unet output
-    inputs = Input((None,None,None,1))
+    if test_shape is None:
+        inputs = Input((None,None,None,1))
+    elif type(test_shape) is int:
+        inputs = Input((test_shape,test_shape,test_shape,1))
     unet_out = model(inputs) 
     if residual:
         outputs = Add()([unet_out, inputs])
@@ -45,6 +49,7 @@ def Unet(filter_base=32,
     if loss == 'mae' or loss == 'mse':
         metrics = ('mse', 'mae')
         _metrics = [eval('loss_%s()' % m) for m in metrics]
+        loss = eval('loss_%s()' % loss)
     elif loss == 'binary_crossentropy':
         _metrics = ['accuracy']
     model.compile(optimizer=optimizer, loss=loss, metrics=_metrics)
